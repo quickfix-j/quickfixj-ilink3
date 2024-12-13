@@ -1,4 +1,9 @@
 
+## sponsor
+
+:heart: This work has been sponsored by [Transtrend](https://www.transtrend.com/) :heart:
+
+
 ## How to build
 
 1. Build artio iLink3 classes from here: https://github.com/quickfix-j/artio-ilink3
