@@ -12,3 +12,6 @@ target/
 # ignore NetBeans configuration
 nb-configuration.xml
 *.bak
+# aeron logs and archive
+client-logs
+client-archive
