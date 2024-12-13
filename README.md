@@ -23,3 +23,41 @@ mvn install:install-file    -Dfile=artio-ilink3-codecs/build/libs/artio-ilink3-c
 ```
 ./mvnw clean package
 ```
+
+## supported messages
+
+```
+To CME
+New Order - Single
+Order Cancel Replace Request
+Order Cancel Request
+Order Status Request
+Order Mass Status Request
+Order Mass Action Request
+Request for Quote
+Party Details Definition Request
+Party Details List Request
+
+From CME
+Business Reject
+Execution Report - New Order
+Execution Report - Modify
+Execution Report - Cancel
+Execution Report - Status
+Execution Report - Trade Outright
+Execution Report - Trade Spread
+Execution Report - Trade Spread Leg
+Execution Report - Elimination
+Execution Report - Reject
+Execution Report - Trade Addendum Outright
+Execution Report - Trade Addendum Spread
+Execution Report - Trade Addendum Spread Leg
+Execution Report Pending Cancel
+Execution Report Pending Replace
+Order Cancel Reject
+Order Cancel Replace Reject
+Request for Quote Acknowledgment
+Order Mass Action Report
+Party Details Definition Request Acknowledgment
+Party Details List Report
+```
