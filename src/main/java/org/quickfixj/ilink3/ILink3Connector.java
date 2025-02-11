@@ -131,6 +131,16 @@ public class ILink3Connector {
 	}
 	return false;
     }
+    
+    public boolean triggerRetransmitRequest(long uuid, long fromSeqNo, int msgCount) {
+	if (connection != null) {
+	    long status = connection.tryRetransmitRequest(uuid, fromSeqNo, msgCount);
+	    if (status >= 0) {
+		return true;
+	    }
+	}
+	return false;
+    }
 
     // TODO we should synchronize this method (or use a lock inside the method) to
     // prevent concurrent usage of encoders and sequence numbers
@@ -190,7 +200,7 @@ public class ILink3Connector {
 		.tradingSystemVendor(settings.getString(SESSION_ID_ILINK3, SETTING_TRADING_SYSTEM_VENDOR))
 		.tradingSystemVersion(settings.getString(SESSION_ID_ILINK3, SETTING_TRADING_SYSTEM_VERSION))
 		.handler(connectionHandler).requestedKeepAliveIntervalInMs(30000)
-//		reEstablishLastConnection(true)
+//		.reEstablishLastConnection(true)
 		.build();
 
 	while (!library.isConnected()) {
@@ -214,7 +224,7 @@ public class ILink3Connector {
 	} else if (reply.hasTimedOut()) {
 	    LOG.error("Timed out when connecting: " + reply);
 	}
-	
+
 //	    todo: act on disconnect from fixlibrary also!
 //	    nb: config for engine and library should not be reused over engine.launch() or library.connect() calls
 //	    when closing the library, make sure that we do not poll
