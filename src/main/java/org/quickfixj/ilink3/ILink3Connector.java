@@ -3,6 +3,8 @@ package org.quickfixj.ilink3;
 
 import static java.util.Collections.singletonList;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -49,6 +51,8 @@ public class ILink3Connector {
     private static final String RECORDING_EVENTS_CHANNEL = "aeron:ipc?control-mode=dynamic|control=localhost:0";
     private static final String REPLICATION_CHANNEL = "aeron:ipc?endpoint=localhost:0";
 
+
+
     private static final String LIBRARY_AERON_CHANNEL = CommonContext.IPC_CHANNEL;
     private static final String ARCHIVE_DIR_NAME = "client-archive";
 
@@ -74,10 +78,15 @@ public class ILink3Connector {
     private final SessionSettings settings;
     private final FIXPMessageHandler fixpMessageHandler;
     private final FIXMessageHandler fixMessageHandler;
+	private final uk.co.real_logic.artio.ilink.ILink3ConnectionHandler connectionHandler;
     private ArchivingMediaDriver mediaDriver;
     private FixEngine engine;
     private FixLibrary library;
     private Future<?> libraryPollingFuture;
+
+	final IdleStrategy idleStrategy = new SleepingMillisIdleStrategy();
+
+
 
     // TODO use SessionSchedule
 
@@ -87,33 +96,69 @@ public class ILink3Connector {
 	this.settings = Objects.requireNonNull(settings, "Need to specify SessionSettings");
 	this.fixpMessageHandler = Objects.requireNonNull(fixpMessageHandler, "Need to specify FIXPMessageHandler");
 	this.fixMessageHandler = Objects.requireNonNull(fixMessageHandler, "Need to specify FIXMessageHandler");
+	this.connectionHandler  = new ILink3ConnectionHandler(LOG,
+			fixpMessageHandler, fixMessageHandler, this );
 
     }
 
-    public void start() throws ConfigError, FieldConvertError {
-	startILink3Connection();
+
+	public void start(boolean useBackUp) throws ConfigError, FieldConvertError {
+	startILink3Connection(false, useBackUp);
     }
 
     public void stop() {
+		try {
 	if (connection != null) {
+		System.out.println("hello0");
 	    if (connection.isConnected()) {
 		LOG.info("Stopping connection...");
 		connection.terminate("application shutdown", 0);
-	    }
+            try {
+                Thread.sleep(5000);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
 	}
+		System.out.println("hello1");
 	if (libraryPollingFuture != null) {
 	    libraryPollingFuture.cancel(true);
 	}
+		System.out.println("hello2");
 	if (library != null) {
 	    library.close();
 	}
+		System.out.println("hello3");
 	if (engine != null) {
 	    engine.close();
 	}
+		System.out.println("hello4");
 	if (mediaDriver != null) {
 	    mediaDriver.close();
 	}
-    }
+		System.out.println("hello5");
+    } catch (Exception e) {
+			LOG.error(e.getMessage(), e);
+		}
+		}
+
+	public void stopForRestart() {
+		try {
+
+			System.out.println("hello1");
+			System.out.println("hello3");
+			if (engine != null) {
+				engine.close();
+			}
+			System.out.println("hello4");
+			if (mediaDriver != null) {
+				mediaDriver.close();
+			}
+			System.out.println("hello5");
+		} catch (Exception e) {
+			LOG.error(e.getMessage(), e);
+		}
+	}
 
     public State getState() {
 	if (connection != null) {
@@ -131,6 +176,24 @@ public class ILink3Connector {
 	}
 	return false;
     }
+
+	public boolean triggerResend(long uuid, int startSeqNum, int msgCount){
+		//todo dit uitwerken of aan chris geven?
+		connection.tryRetransmitRequest(uuid, startSeqNum, msgCount );
+		return  true;
+	}
+
+	public boolean triggerResend(int startSeqNum, int msgCount){
+		//todo dit uitwerken of aan chris geven?
+		connection.tryRetransmitRequest(connection.uuid(), startSeqNum, msgCount );
+		return  true;
+	}
+
+	public long getUuid(){
+		return connection.uuid();
+	}
+
+
 
     // TODO we should synchronize this method (or use a lock inside the method) to
     // prevent concurrent usage of encoders and sequence numbers
@@ -160,27 +223,99 @@ public class ILink3Connector {
 	}
     }
 
-    void startILink3Connection() throws ConfigError, FieldConvertError {
-	LOG.info("Starting iLink3 connection...");
+	void restart_hard() throws ConfigError, FieldConvertError {
+		System.out.println("trying to stop");
+		stop();
+		System.out.println("sleeping before restart");
+        try {
+            Thread.sleep(60000);
+        } catch (InterruptedException e) {
+			LOG.error("dit kan niet !", e);
+        }
+        System.out.println("restarting");
+		startILink3Connection(true, true);
+	}
 
+	void restart() throws ConfigError, FieldConvertError {
+		LOG.info("Starting iLink3 connection...");
+		if (connection != null) {
+			LOG.info("we hadden al een connection met last: {} current: {} state: {}", connection.lastUuid(), connection.uuid(), connection.state());
+			connection.terminate(null, 0);
+
+		}else{
+			LOG.info("er was nog geen connection");
+		}
+
+		if (settings.isSetting(SESSION_ID_ILINK3, SETTING_FIXP_DEBUG)) {
+			System.setProperty("fix.core.debug", settings.getString(SESSION_ID_ILINK3, SETTING_FIXP_DEBUG));
+		}
+		if (libraryPollingFuture != null) {
+			libraryPollingFuture.cancel(true);
+		}
+
+
+		final ILink3ConnectionConfiguration connectionConfiguration = ILink3ConnectionConfiguration.builder()
+				.host("69.50.112.142")
+				.port(Integer.valueOf(settings.getString(SESSION_ID_ILINK3, Initiator.SETTING_SOCKET_CONNECT_PORT)))
+				.sessionId(settings.getString(SESSION_ID_ILINK3, SETTING_SESSION_ID))
+				.firmId(settings.getString(SESSION_ID_ILINK3, SETTING_FIRM_ID))
+				.userKey(settings.getString(SESSION_ID_ILINK3, SETTING_USER_KEY))
+				.accessKeyId(settings.getString(SESSION_ID_ILINK3, SETTING_ACCESS_KEY_ID))
+				.tradingSystemName(settings.getString(SESSION_ID_ILINK3, SETTING_TRADING_SYSTEM_NAME))
+				.tradingSystemVendor(settings.getString(SESSION_ID_ILINK3, SETTING_TRADING_SYSTEM_VENDOR))
+				.tradingSystemVersion(settings.getString(SESSION_ID_ILINK3, SETTING_TRADING_SYSTEM_VERSION))
+				.reEstablishLastConnection(true)
+				.handler(connectionHandler).requestedKeepAliveIntervalInMs(30000)
+
+				.build();
+
+
+
+		final Reply<ILink3Connection> reply = library.initiate(connectionConfiguration);
+
+		LOG.info("Executing connection initiation...");
+		while (reply.isExecuting()) {
+			idleStrategy.idle(library.poll(1));
+		}
+
+        if (reply.hasCompleted()) {
+			connection = reply.resultIfPresent();
+			LOG.info("Connected: " + connection + " current: " + getUuid() +" last: " +connection.lastUuid());
+		} else if (reply.hasErrored()) {
+			LOG.error("Error when connecting: " + reply.error());
+		} else if (reply.hasTimedOut()) {
+			LOG.error("Timed out when connecting: " + reply);
+		}
+		libraryPollingFuture = pollingExecutor.submit(new LibraryPollTask(library, idleStrategy));
+
+	}
+
+    void startILink3Connection(boolean useLastConnection, boolean useBackUp) throws ConfigError {
+	LOG.info("Starting iLink3 connection...");
+	if (connection != null) {
+		LOG.info("we hadden al een connection met last: {} current: {}", connection.lastUuid(), connection.uuid());
+	}else{
+		LOG.info("er was nog geen connection");
+	}
 	if (libraryPollingFuture != null) {
 	    libraryPollingFuture.cancel(true);
 	}
+
 
 	if (settings.isSetting(SESSION_ID_ILINK3, SETTING_FIXP_DEBUG)) {
 	    System.setProperty("fix.core.debug", settings.getString(SESSION_ID_ILINK3, SETTING_FIXP_DEBUG));
 	}
 
-	final IdleStrategy idleStrategy = new SleepingMillisIdleStrategy();
+
 	final EngineConfiguration engineConfiguration = engineConfiguration();
 	mediaDriver = launchMediaDriver(engineConfiguration);
 	engine = FixEngine.launch(engineConfiguration);
 	library = FixLibrary.connect(libraryConfiguration());
 
-	final uk.co.real_logic.artio.ilink.ILink3ConnectionHandler connectionHandler = new ILink3ConnectionHandler(LOG,
-		fixpMessageHandler, fixMessageHandler);
-	final ILink3ConnectionConfiguration connectionConfiguration = ILink3ConnectionConfiguration.builder()
-		.host(settings.getString(SESSION_ID_ILINK3, Initiator.SETTING_SOCKET_CONNECT_HOST))
+
+
+		final ILink3ConnectionConfiguration connectionConfiguration = ILink3ConnectionConfiguration.builder()
+		.host(useBackUp ?"69.50.112.142": settings.getString(SESSION_ID_ILINK3, Initiator.SETTING_SOCKET_CONNECT_HOST) )
 		.port(Integer.valueOf(settings.getString(SESSION_ID_ILINK3, Initiator.SETTING_SOCKET_CONNECT_PORT)))
 		.sessionId(settings.getString(SESSION_ID_ILINK3, SETTING_SESSION_ID))
 		.firmId(settings.getString(SESSION_ID_ILINK3, SETTING_FIRM_ID))
@@ -189,8 +324,9 @@ public class ILink3Connector {
 		.tradingSystemName(settings.getString(SESSION_ID_ILINK3, SETTING_TRADING_SYSTEM_NAME))
 		.tradingSystemVendor(settings.getString(SESSION_ID_ILINK3, SETTING_TRADING_SYSTEM_VENDOR))
 		.tradingSystemVersion(settings.getString(SESSION_ID_ILINK3, SETTING_TRADING_SYSTEM_VERSION))
+				.reEstablishLastConnection(useLastConnection)
 		.handler(connectionHandler).requestedKeepAliveIntervalInMs(30000)
-//		reEstablishLastConnection(true)
+
 		.build();
 
 	while (!library.isConnected()) {
@@ -204,21 +340,25 @@ public class ILink3Connector {
 	    idleStrategy.idle(library.poll(1));
 	}
 
-	libraryPollingFuture = pollingExecutor.submit(new LibraryPollTask(library, idleStrategy));
+
 
 	if (reply.hasCompleted()) {
 	    connection = reply.resultIfPresent();
-	    LOG.info("Connected: " + connection);
+	    LOG.info("Connected: " + connection + " current: " + getUuid() +" last: " +connection.lastUuid());
 	} else if (reply.hasErrored()) {
 	    LOG.error("Error when connecting: " + reply.error());
 	} else if (reply.hasTimedOut()) {
 	    LOG.error("Timed out when connecting: " + reply);
 	}
+		libraryPollingFuture = pollingExecutor.submit(new LibraryPollTask(library, idleStrategy));
 	
 //	    todo: act on disconnect from fixlibrary also!
 //	    nb: config for engine and library should not be reused over engine.launch() or library.connect() calls
 //	    when closing the library, make sure that we do not poll
     }
+
+
+
 
     private static EngineConfiguration engineConfiguration() {
 	final ErrorHandler errorHandler = new ErrorHandler();
@@ -255,7 +395,36 @@ public class ILink3Connector {
 		});
     }
 
-    private static ArchivingMediaDriver launchMediaDriver(EngineConfiguration engineConfiguration) {
+	public void handleRemoteDisconnect(){
+		if (connection != null) {
+			System.out.println("connection is currently Connected: " + connection.isConnected());
+			tryToReconnect();
+		}else{
+			System.out.println("dit is gek connection null disconnect?");
+		}
+	}
+
+	private void tryToReconnect() {
+		System.out.println("sleeping before reconnect");
+        try {
+            Thread.sleep(15000);
+        } catch (InterruptedException e) {
+        }
+        try {
+            restart();
+        } catch (ConfigError e) {
+			LOG.error(e.getMessage(),e );
+            throw new RuntimeException(e);
+        } catch (FieldConvertError e) {
+
+            throw new RuntimeException(e);
+        }catch (Exception e)
+		{
+			LOG.error(e.getMessage(),e );
+		}
+    }
+
+	private static ArchivingMediaDriver launchMediaDriver(EngineConfiguration engineConfiguration) {
 	final MediaDriver.Context context = new MediaDriver.Context().dirDeleteOnStart(true);
 
 	final Archive.Context archiveCtx = new Archive.Context().deleteArchiveOnStart(true)
@@ -274,6 +443,9 @@ public class ILink3Connector {
 	@Override
 	public void onError(Throwable throwable) {
 	    LOG.error("ILink3Connector.ErrorHandler.onError() " + throwable);
+		StringWriter sw = new StringWriter();
+		throwable.printStackTrace(new PrintWriter(sw));
+		LOG.error("ILink3Connector.ErrorHandler.onError() " + sw.toString());
 	}
     }
 

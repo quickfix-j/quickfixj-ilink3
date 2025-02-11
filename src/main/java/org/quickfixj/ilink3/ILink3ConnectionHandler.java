@@ -17,18 +17,27 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
     private final Logger log;
     private final FIXPMessageHandler fixpMessageHandler;
     private final FIXMessageHandler fixMessageHandler;
+	private final ILink3Connector iLink3Connector;
 
     public ILink3ConnectionHandler(Logger log, FIXPMessageHandler fixpMessageHandler,
-	    FIXMessageHandler fixMessageHandler) {
+	    FIXMessageHandler fixMessageHandler, ILink3Connector link3Connector) {
 	this.log = log;
 	this.fixpMessageHandler = fixpMessageHandler;
 	this.fixMessageHandler = fixMessageHandler;
+	this.iLink3Connector = link3Connector;
+
     }
 
     @Override
     public Action onNotApplied(FixPConnection connection, long fromSequenceNumber, long msgCount,
 	    NotAppliedResponse response) {
 	log.info("ILink3Connector.ConnectionHandler.onNotApplied()");
+	Message fixMessage = ILink3MessageConverter.createFixMessage("NotApplied");
+	ILink3MessageConverter.setString(fixMessage,ILink3MessageConverter.UUID,null); //todo argh why don't we have acces to this
+	ILink3MessageConverter.setString(fixMessage,39018,Long.toString(fromSequenceNumber));
+	ILink3MessageConverter.setString(fixMessage,39019,Long.toString(msgCount));
+	ILink3MessageConverter.setString(fixMessage,9553,null);
+
 	response.gapfill();
 	return Action.CONTINUE;
     }
@@ -60,6 +69,7 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
     @Override
     public Action onDisconnect(FixPConnection connection, DisconnectReason reason) {
 	log.info("ILink3Connector.ConnectionHandler.onDisconnect() reason=" + reason);
+	iLink3Connector.handleRemoteDisconnect();
 	return Action.CONTINUE;
     }
 
