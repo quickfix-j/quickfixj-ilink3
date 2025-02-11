@@ -127,6 +127,7 @@ public class ILink3Connector {
 		System.out.println("hello2");
 	if (library != null) {
 	    library.close();
+	    library.poll(10);
 	}
 		System.out.println("hello3");
 	if (engine != null) {
@@ -136,6 +137,12 @@ public class ILink3Connector {
 	if (mediaDriver != null) {
 	    mediaDriver.close();
 	}
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LOG.warn("Exception when stopping", e);
+            }
 		System.out.println("hello5");
     } catch (Exception e) {
 			LOG.error(e.getMessage(), e);
@@ -167,6 +174,13 @@ public class ILink3Connector {
 	return State.UNBOUND;
     }
 
+    public long getUUID() {
+	if (connection != null) {
+	    return connection.uuid();
+	}
+	return 0;
+    }
+
     public boolean canSend() {
 	if (connection != null) {
 	    if (connection.state() == FixPConnection.State.ESTABLISHED
@@ -177,23 +191,22 @@ public class ILink3Connector {
 	return false;
     }
 
-	public boolean triggerResend(long uuid, int startSeqNum, int msgCount){
-		//todo dit uitwerken of aan chris geven?
-		connection.tryRetransmitRequest(uuid, startSeqNum, msgCount );
-		return  true;
+    public boolean triggerRetransmitRequest(long uuid, long fromSeqNo, int msgCount) {
+	if (connection != null) {
+	    long status = connection.tryRetransmitRequest(uuid, fromSeqNo, msgCount);
+	    if (status >= 0) {
+		return true;
+	    }
 	}
+	return false;
+    }
 
-	public boolean triggerResend(int startSeqNum, int msgCount){
-		//todo dit uitwerken of aan chris geven?
-		connection.tryRetransmitRequest(connection.uuid(), startSeqNum, msgCount );
-		return  true;
+    public boolean triggerRetransmitRequest(long fromSeqNo, int msgCount) {
+	if (connection != null) {
+	    return triggerRetransmitRequest(connection.uuid(), fromSeqNo, msgCount);
 	}
-
-	public long getUuid(){
-		return connection.uuid();
-	}
-
-
+	return false;
+    }
 
     // TODO we should synchronize this method (or use a lock inside the method) to
     // prevent concurrent usage of encoders and sequence numbers
@@ -326,7 +339,6 @@ public class ILink3Connector {
 		.tradingSystemVersion(settings.getString(SESSION_ID_ILINK3, SETTING_TRADING_SYSTEM_VERSION))
 				.reEstablishLastConnection(useLastConnection)
 		.handler(connectionHandler).requestedKeepAliveIntervalInMs(30000)
-
 		.build();
 
 	while (!library.isConnected()) {
@@ -344,14 +356,14 @@ public class ILink3Connector {
 
 	if (reply.hasCompleted()) {
 	    connection = reply.resultIfPresent();
-	    LOG.info("Connected: " + connection + " current: " + getUuid() +" last: " +connection.lastUuid());
+	    LOG.info("Connected: " + connection + " current: " + connection.Uuid() +" last: " +connection.lastUuid());
 	} else if (reply.hasErrored()) {
 	    LOG.error("Error when connecting: " + reply.error());
 	} else if (reply.hasTimedOut()) {
 	    LOG.error("Timed out when connecting: " + reply);
 	}
 		libraryPollingFuture = pollingExecutor.submit(new LibraryPollTask(library, idleStrategy));
-	
+
 //	    todo: act on disconnect from fixlibrary also!
 //	    nb: config for engine and library should not be reused over engine.launch() or library.connect() calls
 //	    when closing the library, make sure that we do not poll
