@@ -277,7 +277,7 @@ public class ExecReportConverter {
 	setString(fixMessage, SIDE_TRADE_ID, Long.toString(decoder.sideTradeID()));
 	setString(fixMessage, ORIG_SIDE_TRADE_ID, Long.toString(decoder.origSideTradeID()),
 		ExecutionReportTradeAddendumOutright548Decoder.origSideTradeIDNullValue() != decoder.origSideTradeID());
-	setString(fixMessage, OrdStatus.FIELD, Short.toString(decoder.ordStatus().value()));
+	setString(fixMessage, OrdStatus.FIELD, byteToString(decoder.ordStatus().value()));
 	setString(fixMessage, ExecType.FIELD, byteToString(decoder.execType().value()));
 	setString(fixMessage, Side.FIELD, Short.toString(decoder.side().value()));
 	setString(fixMessage, ManualOrderIndicator.FIELD,
@@ -381,7 +381,7 @@ public class ExecReportConverter {
 		ExecutionReportTradeAddendumSpreadLeg550Decoder.origSideTradeIDNullValue() != decoder
 			.origSideTradeID());
 	setString(fixMessage, TradeDate.FIELD, Integer.toString(decoder.tradeDate()));
-	setString(fixMessage, OrdStatus.FIELD, Short.toString(decoder.ordStatus().value()));
+	setString(fixMessage, OrdStatus.FIELD, byteToString(decoder.ordStatus().value()));
 	setString(fixMessage, ExecType.FIELD, byteToString(decoder.execTypeRaw()));
 	setString(fixMessage, ManualOrderIndicator.FIELD,
 		shortToFIXBooleanValue(decoder.manualOrderIndicator().value()));
@@ -462,7 +462,7 @@ public class ExecReportConverter {
 	setString(fixMessage, ORIG_SIDE_TRADE_ID, Long.toString(decoder.origSideTradeID()),
 		ExecutionReportTradeAddendumSpread549Decoder.origSideTradeIDNullValue() != decoder.origSideTradeID());
 	setString(fixMessage, TradeDate.FIELD, Integer.toString(decoder.tradeDate()));
-	setString(fixMessage, OrdStatus.FIELD, Short.toString(decoder.ordStatus().value()));
+	setString(fixMessage, OrdStatus.FIELD, byteToString(decoder.ordStatus().value()));
 	setString(fixMessage, ExecType.FIELD, byteToString(decoder.execTypeRaw()));
 	setString(fixMessage, OrdType.FIELD, byteToString(decoder.ordTypeRaw()),
 		OrderType.NULL_VAL != decoder.ordType());
