@@ -106,6 +106,7 @@ public class ILink3Connector {
 	}
 	if (library != null) {
 	    library.close();
+	    library.poll(10);
 	}
 	if (engine != null) {
 	    engine.close();
