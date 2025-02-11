@@ -142,6 +142,13 @@ public class ILink3Connector {
 	return false;
     }
 
+    public boolean triggerRetransmitRequest(long fromSeqNo, int msgCount) {
+	if (connection != null) {
+	    return triggerRetransmitRequest(connection.uuid(), fromSeqNo, msgCount);
+	}
+	return false;
+    }
+
     // TODO we should synchronize this method (or use a lock inside the method) to
     // prevent concurrent usage of encoders and sequence numbers
     public boolean sendToTarget(final Message fixMessage) {
