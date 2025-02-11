@@ -121,6 +121,13 @@ public class ILink3Connector {
 	}
 	return State.UNBOUND;
     }
+    
+    public long getUUID() {
+	if (connection != null) {
+	    return connection.uuid();
+	}
+	return 0;
+    }
 
     public boolean canSend() {
 	if (connection != null) {
