@@ -114,6 +114,12 @@ public class ILink3Connector {
 	if (mediaDriver != null) {
 	    mediaDriver.close();
 	}
+	try {
+	    Thread.sleep(1000);
+	} catch (InterruptedException e) {
+	    Thread.currentThread().interrupt();
+	    LOG.warn("Exception when stopping", e);
+	}
     }
 
     public State getState() {
