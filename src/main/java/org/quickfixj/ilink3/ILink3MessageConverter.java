@@ -69,6 +69,7 @@ import quickfix.FixVersions;
 import quickfix.Group;
 import quickfix.InvalidMessage;
 import quickfix.Message;
+import quickfix.MessageFactory;
 import quickfix.field.AffectedOrderID;
 import quickfix.field.AvgPxIndicator;
 import quickfix.field.BusinessRejectReason;
@@ -128,7 +129,6 @@ import quickfix.field.Text;
 import quickfix.field.TimeInForce;
 import quickfix.field.TotalAffectedOrders;
 import quickfix.field.TransactTime;
-import quickfix.fix50.MessageFactory;
 import uk.co.real_logic.artio.fixp.SimpleOpenFramingHeader;
 import uk.co.real_logic.artio.ilink.BusinessRejectReasons;
 import uk.co.real_logic.artio.ilink.ILink3Connection;
@@ -190,12 +190,18 @@ public class ILink3MessageConverter {
     public static final int SENDER_ID = 5392;
     public static final int SENDING_TIME_EPOCH = 5297;
 
+    private static final MessageFactory DEFAULT_MESSAGE_FACTORY = new quickfix.fix50.MessageFactory();
+    private static volatile MessageFactory messageFactory = DEFAULT_MESSAGE_FACTORY;
+
     private static final Logger LOG = LoggerFactory.getLogger(ILink3MessageConverter.class);
-    private static final MessageFactory MESSAGE_FACTORY = new MessageFactory();
     private static final int HEADER_SIZE = SimpleOpenFramingHeader.SOFH_LENGTH + MessageHeaderEncoder.ENCODED_LENGTH;
 
     // TODO create interface to enable overloading of convert method
     // TODO and pass converter to connector to enable use of custom converter
+
+    public static void setMessageFactory(MessageFactory messageFactory) {
+	ILink3MessageConverter.messageFactory = messageFactory != null ? messageFactory : DEFAULT_MESSAGE_FACTORY;
+    }
 
     public static Message convertToFIX(MessageDecoderFlyweight decoderFlyweight) {
 	final Message fixMessage;
@@ -388,7 +394,7 @@ public class ILink3MessageConverter {
     }
 
     static Message createFixMessage(final String msgType) {
-	Message fixMessage = MESSAGE_FACTORY.create(FixVersions.FIXT_SESSION_PREFIX, msgType);
+	Message fixMessage = messageFactory.create(FixVersions.FIXT_SESSION_PREFIX, msgType);
 	// MessageFactory will not set MsgType for unknown messages
 	fixMessage.getHeader().setString(MsgType.FIELD, msgType);
 	return fixMessage;
