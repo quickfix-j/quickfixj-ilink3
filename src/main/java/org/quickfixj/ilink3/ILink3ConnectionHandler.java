@@ -28,39 +28,32 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
     @Override
     public Action onNotApplied(FixPConnection connection, long fromSequenceNumber, long msgCount,
 	    NotAppliedResponse response) {
-	log.info("ILink3Connector.ConnectionHandler.onNotApplied()");
-	response.gapfill();
-	return Action.CONTINUE;
+	return fixpMessageHandler.onNotApplied(connection, fromSequenceNumber, msgCount, response);
     }
 
     @Override
     public Action onRetransmitReject(FixPConnection connection, String reason, long requestTimestamp, int errorCodes) {
-	log.info("ILink3Connector.ConnectionHandler.onRetransmitReject() " + reason + " " + errorCodes);
-	return Action.CONTINUE;
+	return fixpMessageHandler.onRetransmitReject(connection, reason, requestTimestamp, errorCodes);
     }
 
     @Override
     public Action onRetransmitTimeout(FixPConnection connection) {
-	log.warn("ILink3Connector.ConnectionHandler.onRetransmitTimeout()");
-	return Action.CONTINUE;
+	return fixpMessageHandler.onRetransmitTimeout(connection);
     }
 
     @Override
     public Action onSequence(FixPConnection connection, long nextSeqNo) {
-	log.info("ILink3Connector.ConnectionHandler.onSequence() " + nextSeqNo);
-	return Action.CONTINUE;
+	return fixpMessageHandler.onSequence(connection, nextSeqNo);
     }
 
     @Override
     public Action onError(FixPConnection connection, Exception ex) {
-	log.error("ILink3Connector.ConnectionHandler.onError() exception=" + ex);
-	return Action.CONTINUE;
+	return fixpMessageHandler.onError(connection, ex);
     }
 
     @Override
     public Action onDisconnect(FixPConnection connection, DisconnectReason reason) {
-	log.info("ILink3Connector.ConnectionHandler.onDisconnect() reason=" + reason);
-	return Action.CONTINUE;
+	return fixpMessageHandler.onDisconnect(connection, reason);
     }
 
     @Override
