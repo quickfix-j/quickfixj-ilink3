@@ -21,6 +21,11 @@ import uk.co.real_logic.artio.ilink.Ilink3Protocol;
 import uk.co.real_logic.sbe.ir.Ir;
 import uk.co.real_logic.sbe.ir.Token;
 
+/**
+ * Override this class to implement custom behaviour of callbacks in
+ * {@link FIXPMessageHandler}, e.g.
+ * {@link FIXPMessageHandler#onSequence(FixPConnection, long)}
+ */
 public class ILink3FIXPMessageHandler implements FIXPMessageHandler {
 
     private static final Logger LOG = LoggerFactory.getLogger(ILink3FIXPMessageHandler.class);
@@ -68,7 +73,7 @@ public class ILink3FIXPMessageHandler implements FIXPMessageHandler {
 
 	return getDecoder(templateId);
     }
-
+    
     private MessageDecoderFlyweight getDecoder(int templateId) {
 	if (templateToDecoderMap.containsKey(templateId)) {
 	    return templateToDecoderMap.get(templateId);
