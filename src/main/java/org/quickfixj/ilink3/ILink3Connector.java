@@ -99,6 +99,12 @@ public class ILink3Connector {
 	    if (connection.isConnected()) {
 		LOG.info("Stopping connection...");
 		connection.terminate("application shutdown", 0);
+		try {
+		    Thread.sleep(1000);
+		} catch (InterruptedException e) {
+		    Thread.currentThread().interrupt();
+		    LOG.warn("Exception when stopping", e);
+		}
 	    }
 	}
 	if (libraryPollingFuture != null) {
