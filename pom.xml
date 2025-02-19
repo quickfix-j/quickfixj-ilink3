@@ -12,6 +12,37 @@
     <description>QuickFIX/J classes for usage with iLink3</description>
     <url>http://www.quickfixj.org</url>
 
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <jdkLevel>21</jdkLevel>
+        <slf4j.version>2.0.13</slf4j.version>
+        <quickfixj.version>2.3.1</quickfixj.version>
+        <mockito-core.version>4.11.0</mockito-core.version>
+        <hamcrest.version>2.2</hamcrest.version>
+        <junit.jupiter.version>5.10.3</junit.jupiter.version>
+        <maven.compiler.source>8</maven.compiler.source>
+        <maven.compiler.target>8</maven.compiler.target>
+        <mainClass />
+        <aeron.version>1.44.1</aeron.version>
+        <agrona.version>1.21.2</agrona.version>
+        <artio.version>0.154-SNAPSHOT</artio.version>
+        <hdrhistogram.version>2.2.2</hdrhistogram.version>
+        <sbe-tool.version>1.31.1</sbe-tool.version>
+        <maven.version>3.9.8</maven.version> <!-- please also change version in
+        .mvn/wrapper/maven-wrapper.properties -->
+        <maven-libs-version>${maven.version}</maven-libs-version>
+        <maven-plugin-api-version>${maven.version}</maven-plugin-api-version>
+        <maven-bundle-plugin-version>5.1.9</maven-bundle-plugin-version>
+        <maven-resources-plugin-version>3.3.1</maven-resources-plugin-version>
+        <maven-compiler-plugin-version>3.13.0</maven-compiler-plugin-version>
+        <maven-jar-plugin-version>3.4.2</maven-jar-plugin-version>
+        <maven-surefire-plugin-version>3.3.0</maven-surefire-plugin-version>
+        <maven-source-plugin-version>3.3.1</maven-source-plugin-version>
+        <maven-javadoc-plugin-version>3.7.0</maven-javadoc-plugin-version>
+        <apache.mina.version>2.2.3</apache.mina.version>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>uk.co.real-logic</groupId>
@@ -97,36 +128,7 @@
         </dependency>
     </dependencies>
 
-    <properties>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <jdkLevel>1.8</jdkLevel>
-        <slf4j.version>2.0.13</slf4j.version>
-        <quickfixj.version>2.3.1</quickfixj.version>
-        <mockito-core.version>4.11.0</mockito-core.version>
-        <hamcrest.version>2.2</hamcrest.version>
-        <junit.jupiter.version>5.10.3</junit.jupiter.version>
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
-        <mainClass />
-        <aeron.version>1.44.1</aeron.version>
-        <agrona.version>1.21.2</agrona.version>
-        <artio.version>0.154-SNAPSHOT</artio.version>
-        <hdrhistogram.version>2.2.2</hdrhistogram.version>
-        <sbe-tool.version>1.31.1</sbe-tool.version>
-        <maven.version>3.9.8</maven.version> <!-- please also change version in
-        .mvn/wrapper/maven-wrapper.properties -->
-        <maven-libs-version>${maven.version}</maven-libs-version>
-        <maven-plugin-api-version>${maven.version}</maven-plugin-api-version>
-        <maven-bundle-plugin-version>5.1.9</maven-bundle-plugin-version>
-        <maven-resources-plugin-version>3.3.1</maven-resources-plugin-version>
-        <maven-compiler-plugin-version>3.13.0</maven-compiler-plugin-version>
-        <maven-jar-plugin-version>3.4.2</maven-jar-plugin-version>
-        <maven-surefire-plugin-version>3.3.0</maven-surefire-plugin-version>
-        <maven-source-plugin-version>3.3.1</maven-source-plugin-version>
-        <maven-javadoc-plugin-version>3.7.0</maven-javadoc-plugin-version>
-        <apache.mina.version>2.2.3</apache.mina.version>
-    </properties>
+
 
     <build>
         <resources>
@@ -154,7 +156,7 @@
                         </goals>
                         <configuration>
                             <quiet>true</quiet>
-                            <source>8</source>
+                            <source>21</source>
                             <sourcepath>
                                 src/main/java:${project.build.directory}/generated-sources</sourcepath>
                         </configuration>
@@ -195,6 +197,14 @@
                         </goals>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>16</source>
+                    <target>16</target>
+                </configuration>
             </plugin>
         </plugins>
     </build>

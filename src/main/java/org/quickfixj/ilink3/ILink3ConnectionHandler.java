@@ -6,11 +6,17 @@ import org.agrona.sbe.MessageDecoderFlyweight;
 import org.slf4j.Logger;
 
 import io.aeron.logbuffer.ControlledFragmentHandler.Action;
+import quickfix.FieldMap;
+import quickfix.FieldNotFound;
 import quickfix.Message;
+import quickfix.MessageStore;
 import uk.co.real_logic.artio.fixp.FixPConnection;
 import uk.co.real_logic.artio.fixp.FixPMessageHeader;
+import uk.co.real_logic.artio.ilink.ILink3Connection;
 import uk.co.real_logic.artio.library.NotAppliedResponse;
 import uk.co.real_logic.artio.messages.DisconnectReason;
+
+import java.io.IOException;
 
 public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILink3ConnectionHandler {
 
@@ -18,25 +24,33 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
     private final FIXPMessageHandler fixpMessageHandler;
     private final FIXMessageHandler fixMessageHandler;
 	private final ILink3Connector iLink3Connector;
+	private MessageStore messageStore;
 
     public ILink3ConnectionHandler(Logger log, FIXPMessageHandler fixpMessageHandler,
-	    FIXMessageHandler fixMessageHandler, ILink3Connector link3Connector) {
+								   FIXMessageHandler fixMessageHandler, ILink3Connector link3Connector) {
 	this.log = log;
 	this.fixpMessageHandler = fixpMessageHandler;
 	this.fixMessageHandler = fixMessageHandler;
 	this.iLink3Connector = link3Connector;
+	this.messageStore = null; //kan pas na de connection
 
     }
+
+	@Override
+	public Action onEstablishAck( final FixPConnection connection, long previousUuid, long previousSeqNo, long uuid, long nextSeqNo){
+		log.info("we got an establishAck with a an previous uuid " + previousUuid + " and a previous seqnum " + previousSeqNo);
+		iLink3Connector.handleEstablishAck( previousUuid,  previousSeqNo,  uuid,  nextSeqNo);
+		return Action.CONTINUE;
+	}
 
     @Override
     public Action onNotApplied(FixPConnection connection, long fromSequenceNumber, long msgCount,
 	    NotAppliedResponse response) {
 	log.info("ILink3Connector.ConnectionHandler.onNotApplied()");
 	Message fixMessage = ILink3MessageConverter.createFixMessage("NotApplied");
-	ILink3MessageConverter.setString(fixMessage,ILink3MessageConverter.UUID,null); //todo argh why don't we have acces to this
+	ILink3MessageConverter.setString(fixMessage,ILink3MessageConverter.UUID,String.valueOf(((ILink3Connection) connection).uuid()));
 	ILink3MessageConverter.setString(fixMessage,39018,Long.toString(fromSequenceNumber));
 	ILink3MessageConverter.setString(fixMessage,39019,Long.toString(msgCount));
-	ILink3MessageConverter.setString(fixMessage,9553,null);
 
 	response.gapfill();
 	return Action.CONTINUE;
@@ -56,8 +70,16 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
 
     @Override
     public Action onSequence(FixPConnection connection, long nextSeqNo) {
-	log.info("ILink3Connector.ConnectionHandler.onSequence() " + nextSeqNo);
-	return Action.CONTINUE;
+	log.info("ILink3Connector.ConnectionHandler.onSequence() " + nextSeqNo + " " +connection.nextRecvSeqNo()+ " "  +  connection.nextSentSeqNo() );
+
+	//check the seqnum and the message store
+        try {
+            log.info("Message store: " + messageStore.getNextTargetMsgSeqNum() + " " + messageStore.getNextSenderMsgSeqNum());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        return Action.CONTINUE;
     }
 
     @Override
@@ -66,10 +88,12 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
 	return Action.CONTINUE;
     }
 
+
+
     @Override
     public Action onDisconnect(FixPConnection connection, DisconnectReason reason) {
 	log.info("ILink3Connector.ConnectionHandler.onDisconnect() reason=" + reason);
-	iLink3Connector.handleRemoteDisconnect();
+//	iLink3Connector.handleRemoteDisconnect();
 	return Action.CONTINUE;
     }
 
@@ -89,9 +113,37 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
 	}
 	ILink3MessageConverter.logHex(decoderFlyweight);
 
+
+
 	Message fixMessage = ILink3MessageConverter.convertToFIX(decoderFlyweight);
-	fixMessageHandler.onFIXMessage(fixMessage, decoderFlyweight);
+        try {
+			if (messageStore!=null) {
+				if (fixMessage.isSetField(39001)){
+                    try {
+                        String uuid = fixMessage.getString(39001);
+						if (uuid.equals( String.valueOf(((ILink3Connection)connection).uuid()))){
+							log.info("message for current uuid, increment the target counters");
+							log.info("Start Checking targetseqnums: store:{} connection:{}", messageStore.getNextTargetMsgSeqNum(), connection.nextRecvSeqNo());
+							messageStore.incrNextTargetMsgSeqNum();
+							log.info("End Checking targetseqnums: store:{} connection:{}", messageStore.getNextTargetMsgSeqNum(), connection.nextRecvSeqNo());
+						}else{
+							log.info("message for an old uuid, handle but do not increment the counters");
+						}
+                    } catch (FieldNotFound ignored) {
+                    }
+                }
+			}else{
+				log.error("Geen messageStore gevonden, kan het niet opslaan");
+			}
+        } catch (IOException e) {
+            log.info("probleem bij ophogen msgseqnum");
+        }
+        fixMessageHandler.onFIXMessage(fixMessage, decoderFlyweight);
 
 	return Action.CONTINUE;
     }
+
+	public void setMessageStore(MessageStore messageStore) {
+		this.messageStore = messageStore;
+	}
 }

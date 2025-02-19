@@ -12,3 +12,4 @@ MVNW_VERBOSE=true MAVEN_CONFIG="-gs /etc/maven/settings.xml" MVNW_REPOURL=https:
 
 cp /home/ljp/ilink3/quickfixj-ilink3/target/quickfixj-ilink3-1.0.0-SNAPSHOT-jar-with-dependencies.jar  /home/ljp/IdeaProjects/FixEngine/libs/quickfixj-ilink3-1.0.0-SNAPSHOT-jar-with-dependencies.jar
 
+
