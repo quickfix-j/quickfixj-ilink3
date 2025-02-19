@@ -88,8 +88,6 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
 	return Action.CONTINUE;
     }
 
-
-
     @Override
     public Action onDisconnect(FixPConnection connection, DisconnectReason reason) {
 	log.info("ILink3Connector.ConnectionHandler.onDisconnect() reason=" + reason);

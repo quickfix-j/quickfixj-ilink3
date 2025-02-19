@@ -122,41 +122,36 @@ public class ILink3Connector {
     public void stop() {
 		try {
 	if (connection != null) {
-		System.out.println("hello0");
 	    if (connection.isConnected()) {
 		LOG.info("Stopping connection...");
 		connection.terminate("applicationShutdown", 0);
-            try {
-                Thread.sleep(5000);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-        }
+		try {
+		    Thread.sleep(1000);
+		} catch (InterruptedException e) {
+		    Thread.currentThread().interrupt();
+		    LOG.warn("Exception when stopping", e);
+		}
+	    }
 	}
-		System.out.println("hello1");
 	if (libraryPollingFuture != null) {
 	    libraryPollingFuture.cancel(true);
 	}
-		System.out.println("hello2");
 	if (library != null) {
 	    library.close();
 	    library.poll(10);
 	}
-		System.out.println("hello3");
 	if (engine != null) {
 	    engine.close();
 	}
-		System.out.println("hello4");
 	if (mediaDriver != null) {
 	    mediaDriver.close();
 	}
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                LOG.warn("Exception when stopping", e);
-            }
-		System.out.println("hello5");
+	try {
+	    Thread.sleep(1000);
+	} catch (InterruptedException e) {
+	    Thread.currentThread().interrupt();
+	    LOG.warn("Exception when stopping", e);
+	}
     } catch (Exception e) {
 			LOG.error(e.getMessage(), e);
 		}
@@ -186,7 +181,7 @@ public class ILink3Connector {
 	}
 	return State.UNBOUND;
     }
-
+    
     public long getUUID() {
 	if (connection != null) {
 	    return connection.uuid();
