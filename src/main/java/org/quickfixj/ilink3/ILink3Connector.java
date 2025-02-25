@@ -219,7 +219,7 @@ public class ILink3Connector {
             return false;
         }
 
-        LOG.info(fixMessage.toString());
+        LOG.info("[#SendingFIX#]:"+  fixMessage.toString());
         if (canSend()) {
             synchronized (WRITE_LOCK) {
                 try {
