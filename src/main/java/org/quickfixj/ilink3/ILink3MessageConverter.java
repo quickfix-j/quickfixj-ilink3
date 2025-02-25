@@ -1070,9 +1070,13 @@ public class ILink3MessageConverter {
 
 		if (noRelatedSymGroup.isSetField(OrderQty.FIELD)) {
 		    next.orderQty(noRelatedSymGroup.getInt(OrderQty.FIELD));
+		} else {
+		    next.orderQty(NoRelatedSymEncoder.orderQtyNullValue());
 		}
 		if (noRelatedSymGroup.isSetField(Side.FIELD)) {
 		    next.side(RFQSide.get((short) noRelatedSymGroup.getInt(Side.FIELD)));
+		} else {
+		    next.side(RFQSide.NULL_VAL);
 		}
 	    }
 	}
