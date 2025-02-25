@@ -21,6 +21,7 @@ import io.aeron.archive.ArchivingMediaDriver;
 import io.aeron.archive.client.AeronArchive.Context;
 import io.aeron.driver.MediaDriver;
 import quickfix.ConfigError;
+import quickfix.DefaultSessionSchedule;
 import quickfix.FieldConvertError;
 import quickfix.FixVersions;
 import quickfix.Initiator;
@@ -72,6 +73,7 @@ public class ILink3Connector {
 
     private volatile ILink3Connection connection;
     private final SessionSettings settings;
+    private final DefaultSessionSchedule sessionSchedule;
     private final FIXPMessageHandler fixpMessageHandler;
     private final FIXMessageHandler fixMessageHandler;
     private ArchivingMediaDriver mediaDriver;
@@ -79,15 +81,17 @@ public class ILink3Connector {
     private FixLibrary library;
     private Future<?> libraryPollingFuture;
 
-    // TODO use SessionSchedule
-
     public ILink3Connector(SessionSettings settings, FIXPMessageHandler fixpMessageHandler,
 	    FIXMessageHandler fixMessageHandler) throws ConfigError {
 
 	this.settings = Objects.requireNonNull(settings, "Need to specify SessionSettings");
 	this.fixpMessageHandler = Objects.requireNonNull(fixpMessageHandler, "Need to specify FIXPMessageHandler");
 	this.fixMessageHandler = Objects.requireNonNull(fixMessageHandler, "Need to specify FIXMessageHandler");
-
+	try {
+	    sessionSchedule = new DefaultSessionSchedule(settings, SESSION_ID_ILINK3);
+	} catch (FieldConvertError e) {
+	    throw new ConfigError(e);
+	}
     }
 
     public void start() throws ConfigError, FieldConvertError {
@@ -98,7 +102,7 @@ public class ILink3Connector {
 	if (connection != null) {
 	    if (connection.isConnected()) {
 		LOG.info("Stopping connection...");
-		connection.terminate("application shutdown", 0);
+		connection.terminate("application_shutdown", 0);
 		try {
 		    Thread.sleep(1000);
 		} catch (InterruptedException e) {
@@ -134,7 +138,7 @@ public class ILink3Connector {
 	}
 	return State.UNBOUND;
     }
-    
+
     public long getUUID() {
 	if (connection != null) {
 	    return connection.uuid();
@@ -151,7 +155,11 @@ public class ILink3Connector {
 	}
 	return false;
     }
-    
+
+    public boolean isSessionTime() {
+	return sessionSchedule.isSessionTime();
+    }
+
     public boolean triggerRetransmitRequest(long uuid, long fromSeqNo, int msgCount) {
 	if (connection != null) {
 	    long status = connection.tryRetransmitRequest(uuid, fromSeqNo, msgCount);
