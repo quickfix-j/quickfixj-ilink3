@@ -25,6 +25,11 @@ public interface FIXPMessageHandler {
 	return Action.CONTINUE;
     }
 
+    default Action onEstablishmentAck(FixPConnection connection, long previousUuid, long previousSeqNo, long uuid,
+	    long lastuuid, long nextSeqNo) {
+	return Action.CONTINUE;
+    }
+
     default Action onRetransmitReject(FixPConnection connection, String reason, long requestTimestamp, int errorCodes) {
 	return Action.CONTINUE;
     }

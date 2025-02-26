@@ -32,6 +32,13 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
     }
 
     @Override
+    public Action onEstablishmentAck(FixPConnection connection, long previousUuid, long previousSeqNo, long uuid,
+	    long lastuuid, long nextSeqNo) {
+	return fixpMessageHandler.onEstablishmentAck(connection, previousUuid, previousSeqNo, uuid, lastuuid,
+		nextSeqNo);
+    }
+
+    @Override
     public Action onRetransmitReject(FixPConnection connection, String reason, long requestTimestamp, int errorCodes) {
 	return fixpMessageHandler.onRetransmitReject(connection, reason, requestTimestamp, errorCodes);
     }
