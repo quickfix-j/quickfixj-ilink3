@@ -211,25 +211,34 @@ public class ILink3Connector {
         return false;
     }
 
+    
+    public long nextSenderSeqNum(){
+        return connection.nextSentSeqNo();
+    }
 
-    public synchronized boolean sendToTarget(final Message fixMessage) {
+    public long nextRecieverSeqNum(){
+        return connection.nextRecvSeqNo();
+    }
+    
+    public synchronized Message sendToTarget(final Message fixMessage) {
 
         if (fixMessage == null) {
             LOG.error("sendToTarget() called with NULL message");
-            return false;
+            return null;
         }
+        Message sentMessage;
 
-        LOG.info("[#SendingFIX#]:"+  fixMessage.toString());
         if (canSend()) {
             synchronized (WRITE_LOCK) {
                 try {
-                    ILink3MessageConverter.convertFromFIXAndSend(fixMessage, connection);
+                    sentMessage =  ILink3MessageConverter.convertFromFIXAndSend(fixMessage, connection);
                 } catch (Exception e) {
                     LOG.error("Encountered exception when trying to send message {}", fixMessage, e);
                     connection.abort();
-                    return false;
+                    return null;
                 }
                 // TODO insert call to callback to enable modification of message before sending
+
                 if (messageStore != null) {
                     try {
 
@@ -242,12 +251,14 @@ public class ILink3Connector {
                 } else {
                     LOG.error("messageStore is null, cannot increment seqnum?");
                 }
+
+                fixMessageHandler.onFIXMessageSend(sentMessage);
                 connection.commit();
-                return true;
+                return sentMessage;
             }
         } else {
             LOG.error("Cannot send message {}, connection is not initialized or not established.", fixMessage);
-            return false;
+            return null;
         }
     }
 

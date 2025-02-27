@@ -13,4 +13,6 @@ public interface FIXMessageHandler {
 
     void onFIXMessage(Message message, MessageDecoderFlyweight decoderFlyweight);
 
+    void onFIXMessageSend(Message message);
+
 }
