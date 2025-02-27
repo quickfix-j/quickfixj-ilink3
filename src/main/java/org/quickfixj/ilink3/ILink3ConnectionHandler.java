@@ -35,6 +35,8 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
 
     }
 
+	//todo wouldn't it be nice if this was simply complete and you acces to all messages... yes it would
+
 	@Override
 	public Action onEstablishAck( final FixPConnection connection, long previousUuid, long previousSeqNo, long uuid, long lastUuid, long nextSeqNo){
 		log.info("we got an establishAck with a an previous uuid " + previousUuid + " and a previous seqnum " + previousSeqNo + " on uuid: " + uuid + " with nextSeqNum: " + nextSeqNo);
@@ -46,15 +48,22 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
     public Action onNotApplied(FixPConnection connection, long fromSequenceNumber, long msgCount,
 	    NotAppliedResponse response) {
 	log.info("ILink3Connector.ConnectionHandler.onNotApplied()");
-//	Message fixMessage = ILink3MessageConverter.createFixMessage("NotApplied");
-//	ILink3MessageConverter.setString(fixMessage,ILink3MessageConverter.UUID,String.valueOf(((ILink3Connection) connection).uuid()));
-//	ILink3MessageConverter.setString(fixMessage,39018,Long.toString(fromSequenceNumber));
-//	ILink3MessageConverter.setString(fixMessage,39019,Long.toString(msgCount));
+	Message fixMessage = ILink3MessageConverter.createFixMessage("NotApplied");
+	ILink3MessageConverter.setString(fixMessage,ILink3MessageConverter.UUID,String.valueOf(((ILink3Connection) connection).uuid()));
+	ILink3MessageConverter.setString(fixMessage,39018,Long.toString(fromSequenceNumber));
+	ILink3MessageConverter.setString(fixMessage,39019,Long.toString(msgCount));
+	fixMessageHandler.onFIXMessage(fixMessage, null);
 	return fixpMessageHandler.onNotApplied(connection, fromSequenceNumber, msgCount, response);
     }
 
     @Override
     public Action onRetransmitReject(FixPConnection connection, String reason, long requestTimestamp, int errorCodes) {
+		Message fixMessage = ILink3MessageConverter.createFixMessage("RetransmitReject");
+		ILink3MessageConverter.setString(fixMessage,ILink3MessageConverter.UUID,String.valueOf(((ILink3Connection) connection).uuid()));
+		//lastuuid is missing because artio is a annoying about passing everything usefull on
+		ILink3MessageConverter.setString(fixMessage,39002,Long.toString(requestTimestamp));
+		ILink3MessageConverter.setString(fixMessage,39012,Long.toString(errorCodes));
+		fixMessageHandler.onFIXMessage(fixMessage, null);
 	log.info("ILink3Connector.ConnectionHandler.onRetransmitReject() " + reason + " " + errorCodes);
 	return  fixpMessageHandler.onRetransmitReject(connection, reason, requestTimestamp, errorCodes);
     }
@@ -75,6 +84,11 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+		Message fixMessage = ILink3MessageConverter.createFixMessage("Sequence");
+		ILink3MessageConverter.setString(fixMessage,ILink3MessageConverter.UUID,String.valueOf(((ILink3Connection) connection).uuid()));
+		//FaultToleranceIndicator or KeepAliveIntervalLapsed is missing because artio is a annoying about passing everything usefull on
+		ILink3MessageConverter.setString(fixMessage,39013,Long.toString(nextSeqNo));
+		fixMessageHandler.onFIXMessage(fixMessage, null);
 
         return fixpMessageHandler.onSequence(connection, nextSeqNo);
     }
