@@ -1,0 +1,3 @@
+rootProject.name = "quickfixj-ilink3"
+
+includeBuild '../artio-ilink3'
