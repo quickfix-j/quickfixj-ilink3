@@ -40,6 +40,13 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
 	@Override
 	public Action onEstablishAck( final FixPConnection connection, long previousUuid, long previousSeqNo, long uuid, long lastUuid, long nextSeqNo){
 		log.info("we got an establishAck with a an previous uuid " + previousUuid + " and a previous seqnum " + previousSeqNo + " on uuid: " + uuid + " with nextSeqNum: " + nextSeqNo);
+		Message fixMessage = ILink3MessageConverter.createFixMessage("EstablishmentAck");
+		ILink3MessageConverter.setString(fixMessage,ILink3MessageConverter.UUID,String.valueOf(((ILink3Connection) connection).uuid()));
+		ILink3MessageConverter.setString(fixMessage,39013,Long.toString(nextSeqNo));
+		ILink3MessageConverter.setString(fixMessage,39021,Long.toString(previousSeqNo));
+		ILink3MessageConverter.setString(fixMessage,39015,Long.toString(previousUuid));
+		ILink3MessageConverter.setString(fixMessage,39021,Long.toString(previousSeqNo));
+		fixMessageHandler.onFIXMessage(fixMessage, null);
 		iLink3Connector.handleEstablishAck( previousUuid,  previousSeqNo,  uuid, lastUuid, nextSeqNo);
 		return Action.CONTINUE;
 	}
