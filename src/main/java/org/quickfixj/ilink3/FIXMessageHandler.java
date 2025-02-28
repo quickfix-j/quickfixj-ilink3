@@ -15,4 +15,6 @@ public interface FIXMessageHandler {
 
     void onFIXMessageSend(Message message);
 
+    void onFixMessageUnkownReject(Message message, Integer probableSeqNum);
+
 }

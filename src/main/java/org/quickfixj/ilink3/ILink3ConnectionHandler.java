@@ -9,6 +9,7 @@ import io.aeron.logbuffer.ControlledFragmentHandler.Action;
 import quickfix.FieldNotFound;
 import quickfix.Message;
 import quickfix.MessageStore;
+import quickfix.field.MsgType;
 import uk.co.real_logic.artio.fixp.FixPConnection;
 import uk.co.real_logic.artio.fixp.FixPMessageHeader;
 import uk.co.real_logic.artio.ilink.ILink3Connection;
@@ -87,7 +88,7 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
 
 	//check the seqnum and the message store
         try {
-            log.trace("Message store: " + messageStore.getNextTargetMsgSeqNum() + " " + messageStore.getNextSenderMsgSeqNum());
+            log.info("Message store: " + messageStore.getNextTargetMsgSeqNum() + " " + messageStore.getNextSenderMsgSeqNum());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -138,9 +139,9 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
 					try {
 						String uuid = fixMessage.getString(39001);
 						if (uuid.equals(String.valueOf(((ILink3Connection) connection).uuid()))) {
-							log.debug("Start increment targetseqnum: store:{} connection:{}", messageStore.getNextTargetMsgSeqNum(), connection.nextRecvSeqNo());
+							log.info("Start increment targetseqnum: store:{} connection:{}", messageStore.getNextTargetMsgSeqNum(), connection.nextRecvSeqNo());
 							messageStore.incrNextTargetMsgSeqNum();
-							log.debug("End increment targetseqnum: store:{} connection:{}", messageStore.getNextTargetMsgSeqNum(), connection.nextRecvSeqNo());
+							log.info("End increment targetseqnum: store:{} connection:{}", messageStore.getNextTargetMsgSeqNum(), connection.nextRecvSeqNo());
 						} else {
 							log.info("Recieved Message for old UUID: Not incrementing counters");
 						}
@@ -153,12 +154,28 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
 		} catch (IOException e) {
 			log.info("IOException while accessing messageStore", e);
 		}
+		log.info(fixMessage.toString());
+		if (fixMessage.getHeader().getString(MsgType.FIELD).equals("j")){
+			try {
+				int rejectReason = fixMessage.getInt(380);
+				if (rejectReason == 3 || rejectReason == 109) {
+					log.info("Rejection for unprocessed message from cme decrement senderSeqnum and reject");
+					//in the exceptional cases of a recject with reason 3:UnsupportedMSgType or 109:Incoming message could not be decoded
+					//we should not increment the sender (in otherwords we have to decrement the senderseqnum after recieving these rejections)
+					messageStore.setNextSenderMsgSeqNum(messageStore.getNextSenderMsgSeqNum() - 1);
+					fixMessageHandler.onFixMessageUnkownReject(fixMessage,messageStore.getNextTargetMsgSeqNum()-1); //previous message was rejected
+					return Action.CONTINUE;
+				}
+			}catch (FieldNotFound ex){
+				log.error("BuisnessReject with no reject reason!? {}", fixMessage);
+			}
+		}
 		fixMessageHandler.onFIXMessage(fixMessage, decoderFlyweight);
 	}
 	catch (Exception e) {
 		log.error("Error when creating message" + e.getMessage(), e);
 	}
-	return Action.CONTINUE;
+		return Action.CONTINUE;
     }
 
 	public void setMessageStore(MessageStore messageStore) {

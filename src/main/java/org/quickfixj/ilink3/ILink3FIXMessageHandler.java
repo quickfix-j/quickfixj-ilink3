@@ -17,4 +17,9 @@ public class ILink3FIXMessageHandler implements FIXMessageHandler {
         System.out.println("Send FIX message: " + message);
     }
 
+    @Override
+    public void onFixMessageUnkownReject(Message message, Integer probableSeqNum) {
+        System.out.println("BusinessReject: CME can not process FIX message: " + message);
+    }
+
 }
