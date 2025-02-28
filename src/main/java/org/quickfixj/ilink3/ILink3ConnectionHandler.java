@@ -138,9 +138,9 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
 					try {
 						String uuid = fixMessage.getString(39001);
 						if (uuid.equals(String.valueOf(((ILink3Connection) connection).uuid()))) {
-							log.trace("Start incerment targetseqnum: store:{} connection:{}", messageStore.getNextTargetMsgSeqNum(), connection.nextRecvSeqNo());
+							log.debug("Start increment targetseqnum: store:{} connection:{}", messageStore.getNextTargetMsgSeqNum(), connection.nextRecvSeqNo());
 							messageStore.incrNextTargetMsgSeqNum();
-							log.trace("End increment targetseqnum: store:{} connection:{}", messageStore.getNextTargetMsgSeqNum(), connection.nextRecvSeqNo());
+							log.debug("End increment targetseqnum: store:{} connection:{}", messageStore.getNextTargetMsgSeqNum(), connection.nextRecvSeqNo());
 						} else {
 							log.info("Recieved Message for old UUID: Not incrementing counters");
 						}
