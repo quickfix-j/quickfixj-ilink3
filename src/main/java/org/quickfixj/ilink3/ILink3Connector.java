@@ -39,6 +39,7 @@ import uk.co.real_logic.artio.library.LibraryConnectHandler;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.Date;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -463,6 +464,14 @@ public class ILink3Connector {
                 LOG.error("Probleem bij uitlezen messageStore: {}", e.getMessage(), e);
             }
 
+        }
+    }
+
+    public Date getStartTime() throws IOException {
+        if (messageStore == null){
+            return null;
+        }else{
+            return messageStore.getCreationTime();
         }
     }
 
