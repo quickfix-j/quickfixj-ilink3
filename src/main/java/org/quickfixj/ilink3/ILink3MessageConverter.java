@@ -282,7 +282,7 @@ public class ILink3MessageConverter {
 	}
     }
 
-    public static void convertFromFIXAndSend(Message fixMessage, ILink3Connection connection)
+    public static Message convertFromFIXAndSend(Message fixMessage, ILink3Connection connection)
 	    throws ILink3ConnectorException {
 
 	// TODO refactor so that we handle everything in one method and
@@ -302,13 +302,17 @@ public class ILink3MessageConverter {
 	    throw new ILink3ConnectorException("Could not claim buffer for sending message " + fixMessage);
 	}
 
+	Long msqseqnum = connection.nextSentSeqNo() - 1;
 	// fill fields from FIX to SBE message
 	try {
 	    ILink3MessageConverter.convertFromFIX(fixMessage, messageEncoderFlyweight,
-		    connection.nextSentSeqNo() - 1 /* tryClaim already incremented by 1 */);
+				msqseqnum /* tryClaim already incremented by 1 */);
 	} catch (NumberFormatException | InvalidMessage | FieldNotFound e) {
 	    throw new ILink3ConnectorException(e);
 	}
+	//To have a complete quickfix representation of the message we feed it back here. (Currently the seqnum is the important one )
+	fixMessage.setString(SEQ_NUM, String.valueOf(msqseqnum));
+	return  fixMessage;
 
     }
 
@@ -1070,13 +1074,13 @@ public class ILink3MessageConverter {
 
 		if (noRelatedSymGroup.isSetField(OrderQty.FIELD)) {
 		    next.orderQty(noRelatedSymGroup.getInt(OrderQty.FIELD));
-		} else {
-		    next.orderQty(NoRelatedSymEncoder.orderQtyNullValue());
+		}else{
+			next.orderQty(NoRelatedSymEncoder.orderQtyNullValue());
 		}
 		if (noRelatedSymGroup.isSetField(Side.FIELD)) {
 		    next.side(RFQSide.get((short) noRelatedSymGroup.getInt(Side.FIELD)));
-		} else {
-		    next.side(RFQSide.NULL_VAL);
+		}else{
+			next.side(RFQSide.NULL_VAL);
 		}
 	    }
 	}
@@ -1099,6 +1103,7 @@ public class ILink3MessageConverter {
 
 		NoRequestingPartyIDsEncoder next = noRequestingPartyIDsEncoder.next();
 		next.requestingPartyID(noRequestingPartyIDsGroup.getString(REQUESTING_PARTY_ID));
+
 		next.requestingPartyIDSource((byte) noRequestingPartyIDsGroup.getChar(REQUESTING_PARTY_ID_SOURCE));
 		next.requestingPartyRole((byte) noRequestingPartyIDsGroup.getChar(REQUESTING_PARTY_ROLE));
 	    }
