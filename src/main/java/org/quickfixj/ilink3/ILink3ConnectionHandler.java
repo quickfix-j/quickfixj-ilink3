@@ -9,6 +9,7 @@ import io.aeron.logbuffer.ControlledFragmentHandler.Action;
 import quickfix.FieldNotFound;
 import quickfix.Message;
 import quickfix.MessageStore;
+import quickfix.field.MsgType;
 import uk.co.real_logic.artio.fixp.FixPConnection;
 import uk.co.real_logic.artio.fixp.FixPMessageHeader;
 import uk.co.real_logic.artio.ilink.ILink3Connection;
@@ -35,9 +36,18 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
 
     }
 
+	//todo wouldn't it be nice if this was simply complete and you acces to all messages... yes it would
+
 	@Override
 	public Action onEstablishAck( final FixPConnection connection, long previousUuid, long previousSeqNo, long uuid, long lastUuid, long nextSeqNo){
 		log.info("we got an establishAck with a an previous uuid " + previousUuid + " and a previous seqnum " + previousSeqNo + " on uuid: " + uuid + " with nextSeqNum: " + nextSeqNo);
+		Message fixMessage = ILink3MessageConverter.createFixMessage("EstablishmentAck");
+		ILink3MessageConverter.setString(fixMessage,ILink3MessageConverter.UUID,String.valueOf(((ILink3Connection) connection).uuid()));
+		ILink3MessageConverter.setString(fixMessage,39013,Long.toString(nextSeqNo));
+		ILink3MessageConverter.setString(fixMessage,39021,Long.toString(previousSeqNo));
+		ILink3MessageConverter.setString(fixMessage,39015,Long.toString(previousUuid));
+		ILink3MessageConverter.setString(fixMessage,39021,Long.toString(previousSeqNo));
+		fixMessageHandler.onFIXMessage(fixMessage, null);
 		iLink3Connector.handleEstablishAck( previousUuid,  previousSeqNo,  uuid, lastUuid, nextSeqNo);
 		return Action.CONTINUE;
 	}
@@ -46,15 +56,22 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
     public Action onNotApplied(FixPConnection connection, long fromSequenceNumber, long msgCount,
 	    NotAppliedResponse response) {
 	log.info("ILink3Connector.ConnectionHandler.onNotApplied()");
-//	Message fixMessage = ILink3MessageConverter.createFixMessage("NotApplied");
-//	ILink3MessageConverter.setString(fixMessage,ILink3MessageConverter.UUID,String.valueOf(((ILink3Connection) connection).uuid()));
-//	ILink3MessageConverter.setString(fixMessage,39018,Long.toString(fromSequenceNumber));
-//	ILink3MessageConverter.setString(fixMessage,39019,Long.toString(msgCount));
+	Message fixMessage = ILink3MessageConverter.createFixMessage("NotApplied");
+	ILink3MessageConverter.setString(fixMessage,ILink3MessageConverter.UUID,String.valueOf(((ILink3Connection) connection).uuid()));
+	ILink3MessageConverter.setString(fixMessage,39018,Long.toString(fromSequenceNumber));
+	ILink3MessageConverter.setString(fixMessage,39019,Long.toString(msgCount));
+	fixMessageHandler.onFIXMessage(fixMessage, null);
 	return fixpMessageHandler.onNotApplied(connection, fromSequenceNumber, msgCount, response);
     }
 
     @Override
     public Action onRetransmitReject(FixPConnection connection, String reason, long requestTimestamp, int errorCodes) {
+		Message fixMessage = ILink3MessageConverter.createFixMessage("RetransmitReject");
+		ILink3MessageConverter.setString(fixMessage,ILink3MessageConverter.UUID,String.valueOf(((ILink3Connection) connection).uuid()));
+		//lastuuid is missing because artio is a annoying about passing everything usefull on
+		ILink3MessageConverter.setString(fixMessage,39002,Long.toString(requestTimestamp));
+		ILink3MessageConverter.setString(fixMessage,39012,Long.toString(errorCodes));
+		fixMessageHandler.onFIXMessage(fixMessage, null);
 	log.info("ILink3Connector.ConnectionHandler.onRetransmitReject() " + reason + " " + errorCodes);
 	return  fixpMessageHandler.onRetransmitReject(connection, reason, requestTimestamp, errorCodes);
     }
@@ -71,10 +88,15 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
 
 	//check the seqnum and the message store
         try {
-            log.trace("Message store: " + messageStore.getNextTargetMsgSeqNum() + " " + messageStore.getNextSenderMsgSeqNum());
+            log.info("Message store: " + messageStore.getNextTargetMsgSeqNum() + " " + messageStore.getNextSenderMsgSeqNum());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+		Message fixMessage = ILink3MessageConverter.createFixMessage("Sequence");
+		ILink3MessageConverter.setString(fixMessage,ILink3MessageConverter.UUID,String.valueOf(((ILink3Connection) connection).uuid()));
+		//FaultToleranceIndicator or KeepAliveIntervalLapsed is missing because artio is a annoying about passing everything usefull on
+		ILink3MessageConverter.setString(fixMessage,39013,Long.toString(nextSeqNo));
+		fixMessageHandler.onFIXMessage(fixMessage, null);
 
         return fixpMessageHandler.onSequence(connection, nextSeqNo);
     }
@@ -117,9 +139,9 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
 					try {
 						String uuid = fixMessage.getString(39001);
 						if (uuid.equals(String.valueOf(((ILink3Connection) connection).uuid()))) {
-							log.trace("Start incerment targetseqnum: store:{} connection:{}", messageStore.getNextTargetMsgSeqNum(), connection.nextRecvSeqNo());
+							log.info("Start increment targetseqnum: store:{} connection:{}", messageStore.getNextTargetMsgSeqNum(), connection.nextRecvSeqNo());
 							messageStore.incrNextTargetMsgSeqNum();
-							log.trace("End increment targetseqnum: store:{} connection:{}", messageStore.getNextTargetMsgSeqNum(), connection.nextRecvSeqNo());
+							log.info("End increment targetseqnum: store:{} connection:{}", messageStore.getNextTargetMsgSeqNum(), connection.nextRecvSeqNo());
 						} else {
 							log.info("Recieved Message for old UUID: Not incrementing counters");
 						}
@@ -132,12 +154,28 @@ public class ILink3ConnectionHandler implements uk.co.real_logic.artio.ilink.ILi
 		} catch (IOException e) {
 			log.info("IOException while accessing messageStore", e);
 		}
+		log.info(fixMessage.toString());
+		if (fixMessage.getHeader().getString(MsgType.FIELD).equals("j")){
+			try {
+				int rejectReason = fixMessage.getInt(380);
+				if (rejectReason == 3 || rejectReason == 109) {
+					log.info("Rejection for unprocessed message from cme decrement senderSeqnum and reject");
+					//in the exceptional cases of a recject with reason 3:UnsupportedMSgType or 109:Incoming message could not be decoded
+					//we should not increment the sender (in otherwords we have to decrement the senderseqnum after recieving these rejections)
+					messageStore.setNextSenderMsgSeqNum(messageStore.getNextSenderMsgSeqNum() - 1);
+					fixMessageHandler.onFixMessageUnkownReject(fixMessage,messageStore.getNextTargetMsgSeqNum()-1); //previous message was rejected
+					return Action.CONTINUE;
+				}
+			}catch (FieldNotFound ex){
+				log.error("BuisnessReject with no reject reason!? {}", fixMessage);
+			}
+		}
 		fixMessageHandler.onFIXMessage(fixMessage, decoderFlyweight);
 	}
 	catch (Exception e) {
 		log.error("Error when creating message" + e.getMessage(), e);
 	}
-	return Action.CONTINUE;
+		return Action.CONTINUE;
     }
 
 	public void setMessageStore(MessageStore messageStore) {

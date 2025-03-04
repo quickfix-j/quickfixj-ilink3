@@ -1,0 +1,27 @@
+plugins {
+  id 'java'
+  id 'java-library'
+}
+
+dependencies {
+  //implementation(files('../artio-ilink3/artio-ilink3-codecs/build/libs/artio-ilink3-codecs-0.154-SNAPSHOT.jar'))
+  api "uk.co.real-logic:artio-core"
+  api "uk.co.real-logic:artio-codecs"
+  api "uk.co.real-logic:artio-ilink3-impl"
+  api "uk.co.real-logic:artio-ilink3-codecs"
+  api "uk.co.real-logic:sbe-tool:1.31.1"
+  implementation "org.agrona:agrona:1.21.2"
+  implementation "org.hdrhistogram:HdrHistogram:2.2.2"
+  implementation "io.aeron:aeron-client:1.44.1"
+  implementation "io.aeron:aeron-driver:1.44.1"
+  implementation "io.aeron:aeron-archive:1.44.1"
+  implementation "org.quickfixj:quickfixj-messages-fix50:2.3.1"
+  implementation "org.slf4j:slf4j-api:2.0.13"  
+  implementation "org.slf4j:slf4j-jdk14:2.0.13"
+
+  testImplementation "org.junit.jupiter:junit-jupiter:5.12.0"
+  testImplementation "org.mockito:mockito-core:4.11.0"
+  testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+group = "org.quickfixj"

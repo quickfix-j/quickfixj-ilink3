@@ -13,6 +13,7 @@ import org.agrona.concurrent.SleepingMillisIdleStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import quickfix.ConfigError;
+import quickfix.DefaultSessionSchedule;
 import quickfix.FieldConvertError;
 import quickfix.FixVersions;
 import quickfix.Initiator;
@@ -37,6 +38,7 @@ import uk.co.real_logic.artio.library.LibraryConnectHandler;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.Date;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -77,6 +79,7 @@ public class ILink3Connector {
 
     private volatile ILink3Connection connection;
     private final SessionSettings settings;
+    private final DefaultSessionSchedule sessionSchedule;
     private final FIXPMessageHandler fixpMessageHandler;
     private final FIXMessageHandler fixMessageHandler;
     private final ILink3ConnectionHandler connectionHandler;
@@ -106,6 +109,11 @@ public class ILink3Connector {
         this.fixMessageHandler = Objects.requireNonNull(fixMessageHandler, "Need to specify FIXMessageHandler");
         this.connectionHandler = new ILink3ConnectionHandler(LOG,
                 fixpMessageHandler, fixMessageHandler, this);
+        try {
+            sessionSchedule = new DefaultSessionSchedule(settings, SESSION_ID_ILINK3);
+        } catch (FieldConvertError e) {
+            throw new ConfigError(e);
+        }
 
     }
 
@@ -122,7 +130,7 @@ public class ILink3Connector {
             if (connection != null) {
                 if (connection.isConnected()) {
                     LOG.info("Stopping connection...");
-                    connection.terminate("applicationShutdown", 0);
+                    connection.terminate("application_shutdown", 0);
                     try {
                         Thread.sleep(1000);
                     } catch (InterruptedException e) {
@@ -180,6 +188,10 @@ public class ILink3Connector {
         return false;
     }
 
+    public boolean isSessionTime() {
+        return sessionSchedule.isSessionTime();
+    }
+
     public boolean triggerRetransmitRequest(long uuid, long fromSeqNo, int msgCount) {
         if (connection != null) {
             long status = -1;
@@ -212,24 +224,33 @@ public class ILink3Connector {
     }
 
 
-    public synchronized boolean sendToTarget(final Message fixMessage) {
+    public long nextSenderSeqNum() {
+        return connection.nextSentSeqNo();
+    }
+
+    public long nextRecieverSeqNum() {
+        return connection.nextRecvSeqNo();
+    }
+
+    public synchronized Message sendToTarget(final Message fixMessage) {
 
         if (fixMessage == null) {
             LOG.error("sendToTarget() called with NULL message");
-            return false;
+            return null;
         }
+        Message sentMessage;
 
-        LOG.info(fixMessage.toString());
         if (canSend()) {
             synchronized (WRITE_LOCK) {
                 try {
-                    ILink3MessageConverter.convertFromFIXAndSend(fixMessage, connection);
+                    sentMessage = ILink3MessageConverter.convertFromFIXAndSend(fixMessage, connection);
                 } catch (Exception e) {
                     LOG.error("Encountered exception when trying to send message {}", fixMessage, e);
                     connection.abort();
-                    return false;
+                    return null;
                 }
                 // TODO insert call to callback to enable modification of message before sending
+
                 if (messageStore != null) {
                     try {
 
@@ -242,12 +263,14 @@ public class ILink3Connector {
                 } else {
                     LOG.error("messageStore is null, cannot increment seqnum?");
                 }
+
+                fixMessageHandler.onFIXMessageSend(sentMessage);
                 connection.commit();
-                return true;
+                return sentMessage;
             }
         } else {
             LOG.error("Cannot send message {}, connection is not initialized or not established.", fixMessage);
-            return false;
+            return null;
         }
     }
 
@@ -427,19 +450,31 @@ public class ILink3Connector {
 
         }
         if (previousUuid != 0 && previousSeqNo > 0) {
-            LOG.info("PreviousUuid was: {} with previousSeqNum:{} loading message store from previous session to verify for missing messages", previousUuid, previousSeqNo);
-            MessageStore prevMessageStore = messageStoreFactory.create(new SessionID(FixVersions.BEGINSTRING_FIXT11, "QFJ", "ILINK3", String.valueOf(previousUuid)));
-            try {
-                LOG.info("found last processed seqnum for uuid:{} @ {}", previousUuid, prevMessageStore.getNextTargetMsgSeqNum() - 1);
-                if (prevMessageStore.getNextTargetMsgSeqNum() <= previousSeqNo) {
-                    LOG.info("Last processed buisness message is diffrent then what we recived from cme: {} found: {} triggering a resend request ", prevMessageStore.getNextTargetMsgSeqNum() - 1, previousSeqNo);
-                    pendingResetRequest = new ResendRequest(previousUuid, prevMessageStore.getNextTargetMsgSeqNum());
+            if (previousUuid == lastUuid) {
+                LOG.info("Artio can detect the discrpeency and wil automatically send a resend request, please double check");
+            } else {
+                LOG.info("PreviousUuid was: {} with previousSeqNum:{} loading message store from previous session to verify for missing messages", previousUuid, previousSeqNo);
+                MessageStore prevMessageStore = messageStoreFactory.create(new SessionID(FixVersions.BEGINSTRING_FIXT11, "QFJ", "ILINK3", String.valueOf(previousUuid)));
+                try {
+                    LOG.info("found last processed seqnum for uuid:{} @ {}", previousUuid, prevMessageStore.getNextTargetMsgSeqNum() - 1);
+                    if (prevMessageStore.getNextTargetMsgSeqNum() <= previousSeqNo) {
+                        LOG.info("Last processed buisness message is diffrent then what we recived from cme: {} found: {} triggering a resend request ", prevMessageStore.getNextTargetMsgSeqNum() - 1, previousSeqNo);
+                        pendingResetRequest = new ResendRequest(previousUuid, prevMessageStore.getNextTargetMsgSeqNum());
 
+                    }
+                } catch (IOException e) {
+                    LOG.error("Probleem bij uitlezen messageStore: {}", e.getMessage(), e);
                 }
-            } catch (IOException e) {
-                LOG.error("Probleem bij uitlezen messageStore: {}", e.getMessage(), e);
             }
 
+        }
+    }
+
+    public Date getStartTime() throws IOException {
+        if (messageStore == null) {
+            return null;
+        } else {
+            return messageStore.getCreationTime();
         }
     }
 
