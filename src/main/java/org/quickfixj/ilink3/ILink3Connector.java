@@ -13,6 +13,8 @@ import org.agrona.concurrent.SleepingMillisIdleStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import quickfix.ConfigError;
+import quickfix.DefaultSessionSchedule;
+import quickfix.DefaultSessionSchedule;
 import quickfix.FieldConvertError;
 import quickfix.FixVersions;
 import quickfix.Initiator;
@@ -77,6 +79,7 @@ public class ILink3Connector {
 
     private volatile ILink3Connection connection;
     private final SessionSettings settings;
+    private final DefaultSessionSchedule sessionSchedule;
     private final FIXPMessageHandler fixpMessageHandler;
     private final FIXMessageHandler fixMessageHandler;
     private final ILink3ConnectionHandler connectionHandler;
@@ -106,6 +109,11 @@ public class ILink3Connector {
         this.fixMessageHandler = Objects.requireNonNull(fixMessageHandler, "Need to specify FIXMessageHandler");
         this.connectionHandler = new ILink3ConnectionHandler(LOG,
                 fixpMessageHandler, fixMessageHandler, this);
+        try {
+            sessionSchedule = new DefaultSessionSchedule(settings, SESSION_ID_ILINK3);
+        } catch (FieldConvertError e) {
+            throw new ConfigError(e);
+        }
 
     }
 
@@ -122,7 +130,7 @@ public class ILink3Connector {
             if (connection != null) {
                 if (connection.isConnected()) {
                     LOG.info("Stopping connection...");
-                    connection.terminate("applicationShutdown", 0);
+		connection.terminate("application_shutdown", 0);
                     try {
                         Thread.sleep(1000);
                     } catch (InterruptedException e) {
@@ -180,6 +188,10 @@ public class ILink3Connector {
         return false;
     }
 
+    public boolean isSessionTime() {
+	return sessionSchedule.isSessionTime();
+    }
+
     public boolean triggerRetransmitRequest(long uuid, long fromSeqNo, int msgCount) {
         if (connection != null) {
             long status = -1;
@@ -211,7 +223,7 @@ public class ILink3Connector {
         return false;
     }
 
-    
+
     public long nextSenderSeqNum(){
         return connection.nextSentSeqNo();
     }
@@ -219,7 +231,7 @@ public class ILink3Connector {
     public long nextRecieverSeqNum(){
         return connection.nextRecvSeqNo();
     }
-    
+
     public synchronized Message sendToTarget(final Message fixMessage) {
 
         if (fixMessage == null) {

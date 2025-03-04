@@ -1103,7 +1103,6 @@ public class ILink3MessageConverter {
 
 		NoRequestingPartyIDsEncoder next = noRequestingPartyIDsEncoder.next();
 		next.requestingPartyID(noRequestingPartyIDsGroup.getString(REQUESTING_PARTY_ID));
-
 		next.requestingPartyIDSource((byte) noRequestingPartyIDsGroup.getChar(REQUESTING_PARTY_ID_SOURCE));
 		next.requestingPartyRole((byte) noRequestingPartyIDsGroup.getChar(REQUESTING_PARTY_ROLE));
 	    }
