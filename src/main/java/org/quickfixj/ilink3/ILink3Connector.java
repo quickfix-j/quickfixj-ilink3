@@ -14,7 +14,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import quickfix.ConfigError;
 import quickfix.DefaultSessionSchedule;
-import quickfix.DefaultSessionSchedule;
 import quickfix.FieldConvertError;
 import quickfix.FixVersions;
 import quickfix.Initiator;
@@ -131,7 +130,7 @@ public class ILink3Connector {
             if (connection != null) {
                 if (connection.isConnected()) {
                     LOG.info("Stopping connection...");
-		connection.terminate("application_shutdown", 0);
+                    connection.terminate("application_shutdown", 0);
                     try {
                         Thread.sleep(1000);
                     } catch (InterruptedException e) {
@@ -190,7 +189,7 @@ public class ILink3Connector {
     }
 
     public boolean isSessionTime() {
-	return sessionSchedule.isSessionTime();
+        return sessionSchedule.isSessionTime();
     }
 
     public boolean triggerRetransmitRequest(long uuid, long fromSeqNo, int msgCount) {
@@ -225,11 +224,11 @@ public class ILink3Connector {
     }
 
 
-    public long nextSenderSeqNum(){
+    public long nextSenderSeqNum() {
         return connection.nextSentSeqNo();
     }
 
-    public long nextRecieverSeqNum(){
+    public long nextRecieverSeqNum() {
         return connection.nextRecvSeqNo();
     }
 
@@ -244,7 +243,7 @@ public class ILink3Connector {
         if (canSend()) {
             synchronized (WRITE_LOCK) {
                 try {
-                    sentMessage =  ILink3MessageConverter.convertFromFIXAndSend(fixMessage, connection);
+                    sentMessage = ILink3MessageConverter.convertFromFIXAndSend(fixMessage, connection);
                 } catch (Exception e) {
                     LOG.error("Encountered exception when trying to send message {}", fixMessage, e);
                     connection.abort();
@@ -451,26 +450,30 @@ public class ILink3Connector {
 
         }
         if (previousUuid != 0 && previousSeqNo > 0) {
-            LOG.info("PreviousUuid was: {} with previousSeqNum:{} loading message store from previous session to verify for missing messages", previousUuid, previousSeqNo);
-            MessageStore prevMessageStore = messageStoreFactory.create(new SessionID(FixVersions.BEGINSTRING_FIXT11, "QFJ", "ILINK3", String.valueOf(previousUuid)));
-            try {
-                LOG.info("found last processed seqnum for uuid:{} @ {}", previousUuid, prevMessageStore.getNextTargetMsgSeqNum() - 1);
-                if (prevMessageStore.getNextTargetMsgSeqNum() <= previousSeqNo) {
-                    LOG.info("Last processed buisness message is diffrent then what we recived from cme: {} found: {} triggering a resend request ", prevMessageStore.getNextTargetMsgSeqNum() - 1, previousSeqNo);
-                    pendingResetRequest = new ResendRequest(previousUuid, prevMessageStore.getNextTargetMsgSeqNum());
+            if (previousUuid == lastUuid) {
+                LOG.info("Artio can detect the discrpeency and wil automatically send a resend request, please double check");
+            } else {
+                LOG.info("PreviousUuid was: {} with previousSeqNum:{} loading message store from previous session to verify for missing messages", previousUuid, previousSeqNo);
+                MessageStore prevMessageStore = messageStoreFactory.create(new SessionID(FixVersions.BEGINSTRING_FIXT11, "QFJ", "ILINK3", String.valueOf(previousUuid)));
+                try {
+                    LOG.info("found last processed seqnum for uuid:{} @ {}", previousUuid, prevMessageStore.getNextTargetMsgSeqNum() - 1);
+                    if (prevMessageStore.getNextTargetMsgSeqNum() <= previousSeqNo) {
+                        LOG.info("Last processed buisness message is diffrent then what we recived from cme: {} found: {} triggering a resend request ", prevMessageStore.getNextTargetMsgSeqNum() - 1, previousSeqNo);
+                        pendingResetRequest = new ResendRequest(previousUuid, prevMessageStore.getNextTargetMsgSeqNum());
 
+                    }
+                } catch (IOException e) {
+                    LOG.error("Probleem bij uitlezen messageStore: {}", e.getMessage(), e);
                 }
-            } catch (IOException e) {
-                LOG.error("Probleem bij uitlezen messageStore: {}", e.getMessage(), e);
             }
 
         }
     }
 
     public Date getStartTime() throws IOException {
-        if (messageStore == null){
+        if (messageStore == null) {
             return null;
-        }else{
+        } else {
             return messageStore.getCreationTime();
         }
     }
