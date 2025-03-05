@@ -13,4 +13,7 @@ public interface FIXMessageHandler {
 
     void onFIXMessage(Message message, MessageDecoderFlyweight decoderFlyweight);
 
+    void onFIXMessageSent(Message message);
+
+    void onFixMessageUnknownReject(Message message, int probableSeqNum);
 }
