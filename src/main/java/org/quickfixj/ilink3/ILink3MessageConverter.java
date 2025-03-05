@@ -282,7 +282,7 @@ public class ILink3MessageConverter {
 	}
     }
 
-    public static void convertFromFIXAndSend(Message fixMessage, ILink3Connection connection)
+    public static Message convertFromFIXAndSend(Message fixMessage, ILink3Connection connection)
 	    throws ILink3ConnectorException {
 
 	// TODO refactor so that we handle everything in one method and
@@ -309,7 +309,7 @@ public class ILink3MessageConverter {
 	} catch (NumberFormatException | InvalidMessage | FieldNotFound e) {
 	    throw new ILink3ConnectorException(e);
 	}
-
+	return fixMessage;
     }
 
     public static void convertFromFIX(Message fixMessage, MessageEncoderFlyweight messageEncoderFlyweight, long seqNum)
