@@ -355,6 +355,7 @@ public class ILink3MessageConverter {
 	    throw new InvalidMessage("Encountered unknown or unsupported MsgType " + msgType);
 	}
 
+	fixMessage.getHeader().setString(MsgSeqNum.FIELD, Long.toString(seqNum));
 	logHex(messageEncoderFlyweight);
     }
 
