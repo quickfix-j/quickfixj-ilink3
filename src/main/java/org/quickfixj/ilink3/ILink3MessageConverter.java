@@ -160,6 +160,13 @@ public class ILink3MessageConverter {
     public static final int POSS_RETRANS_FLAG = 9765;
     public static final int DELAY_DURATION = 5904;
     public static final int UUID = 39001;
+    public static final int REQUEST_TIMESTAMP = 39002;
+    public static final int ERROR_CODES = 39012;
+    public static final int FROM_SEQ_NO = 39018;
+    public static final int MSG_COUNT = 39019;
+    public static final int PREVIOUS_SEQ_NO = 39021;
+    public static final int PREVIOUS_UUID = 39015;
+    public static final int NEXT_SEQ_NO = 39013;
     public static final int SEQ_NUM = 9726;
     public static final int TRD_REG_PUBLICATION_REASON = 2670;
     public static final int TRD_REG_PUBLICATION_TYPE = 2669;

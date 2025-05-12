@@ -3,6 +3,10 @@ package org.quickfixj.ilink3;
 
 import static java.util.Collections.singletonList;
 
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.util.Date;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -26,6 +30,8 @@ import quickfix.FieldConvertError;
 import quickfix.FixVersions;
 import quickfix.Initiator;
 import quickfix.Message;
+import quickfix.MessageStore;
+import quickfix.MessageStoreFactory;
 import quickfix.SessionID;
 import quickfix.SessionSettings;
 import uk.co.real_logic.artio.Reply;
@@ -68,40 +74,57 @@ public class ILink3Connector {
      * dummy sessionID that is used for QFJ-ILINK3 converted messages
      */
     public static final SessionID SESSION_ID_ILINK3 = new SessionID(FixVersions.BEGINSTRING_FIXT11, "QFJ", "ILINK3");
+    private static final Object WRITE_LOCK = new Object();
 
     private final ExecutorService pollingExecutor = Executors.newSingleThreadExecutor();
+
+    private final IdleStrategy idleStrategy = new SleepingMillisIdleStrategy();
 
     private volatile ILink3Connection connection;
     private final SessionSettings settings;
     private final DefaultSessionSchedule sessionSchedule;
-    private final FIXPMessageHandler fixpMessageHandler;
-    private final FIXMessageHandler fixMessageHandler;
+    private final ILink3ConnectionHandler connectionHandler;
     private ArchivingMediaDriver mediaDriver;
     private FixEngine engine;
     private FixLibrary library;
     private Future<?> libraryPollingFuture;
 
+    private final MessageStoreFactory messageStoreFactory;
+    private MessageStore messageStore = null; // this is null till we have a UUID
+    private RetransmitRequest pendingRetransmitRequest = null;
+
     public ILink3Connector(SessionSettings settings, FIXPMessageHandler fixpMessageHandler,
-	    FIXMessageHandler fixMessageHandler) throws ConfigError {
+	    FIXMessageHandler fixMessageHandler, MessageStoreFactory messageStoreFactory) throws ConfigError {
 
 	this.settings = Objects.requireNonNull(settings, "Need to specify SessionSettings");
-	this.fixpMessageHandler = Objects.requireNonNull(fixpMessageHandler, "Need to specify FIXPMessageHandler");
-	this.fixMessageHandler = Objects.requireNonNull(fixMessageHandler, "Need to specify FIXMessageHandler");
+	this.messageStoreFactory = messageStoreFactory;
+	Objects.requireNonNull(fixpMessageHandler, "Need to specify FIXPMessageHandler");
+	Objects.requireNonNull(fixMessageHandler, "Need to specify FIXMessageHandler");
 	try {
 	    sessionSchedule = new DefaultSessionSchedule(settings, SESSION_ID_ILINK3);
 	} catch (FieldConvertError e) {
 	    throw new ConfigError(e);
 	}
+	connectionHandler = new ILink3ConnectionHandler(LOG, fixpMessageHandler, fixMessageHandler, this);
     }
 
     public void start() throws ConfigError, FieldConvertError {
-	startILink3Connection();
+	start(false);
+    }
+
+    public void start(boolean useBackUp) throws ConfigError, FieldConvertError {
+	try {
+	    startILink3Connection(false, useBackUp);
+	} catch (Exception e) {
+	    LOG.error("Failed to start ILink3Connector", e);
+	}
     }
 
     public void stop() {
 	if (connection != null) {
 	    if (connection.isConnected()) {
 		LOG.info("Stopping connection...");
+		// shutdown text needs to be a single word
 		connection.terminate("application_shutdown", 0);
 		try {
 		    Thread.sleep(1000);
@@ -162,7 +185,23 @@ public class ILink3Connector {
 
     public boolean triggerRetransmitRequest(long uuid, long fromSeqNo, int msgCount) {
 	if (connection != null) {
-	    long status = connection.tryRetransmitRequest(uuid, fromSeqNo, msgCount);
+	    long status = -1;
+	    if (messageStore != null) {
+		try {
+		    synchronized (WRITE_LOCK) {
+			LOG.info("Start checking senderSeqNums: store: {} connection: {}",
+				messageStore.getNextSenderMsgSeqNum(), connection.nextSentSeqNo());
+			messageStore.incrNextSenderMsgSeqNum();
+			status = connection.tryRetransmitRequest(uuid, fromSeqNo, msgCount);
+			LOG.info("End checking senderSeqNums: store: {} connection: {}",
+				messageStore.getNextSenderMsgSeqNum(), connection.nextSentSeqNo());
+		    }
+		} catch (IOException e) {
+		    throw new RuntimeException(e);
+		}
+	    } else {
+		LOG.error("MessageStore is null, cannot increment seqNum");
+	    }
 	    if (status >= 0) {
 		return true;
 	    }
@@ -175,6 +214,14 @@ public class ILink3Connector {
 	    return triggerRetransmitRequest(connection.uuid(), fromSeqNo, msgCount);
 	}
 	return false;
+    }
+
+    public long nextSenderSeqNum() {
+        return connection.nextSentSeqNo();
+    }
+
+    public long nextReceiverSeqNum() {
+        return connection.nextRecvSeqNo();
     }
 
     // TODO we should synchronize this method (or use a lock inside the method) to
@@ -197,6 +244,23 @@ public class ILink3Connector {
 
 	    // TODO insert call to callback to enable modification of message before sending
 
+	    if (messageStore != null) {
+		try {
+		    synchronized (WRITE_LOCK) {
+			LOG.info("Start checking senderSeqNums: store: {} connection: {}",
+				messageStore.getNextSenderMsgSeqNum(), connection.nextSentSeqNo());
+			messageStore.incrNextSenderMsgSeqNum();
+			LOG.info("End checking senderSeqNums: store: {} connection: {}",
+				messageStore.getNextSenderMsgSeqNum(), connection.nextSentSeqNo());
+		    }
+		} catch (IOException e) {
+		    connection.abort();
+		    throw new RuntimeException(e);
+		}
+	    } else {
+		LOG.error("MessageStore is null, cannot increment seqNum");
+	    }
+
 	    connection.commit();
 	    return true;
 	} else {
@@ -205,28 +269,47 @@ public class ILink3Connector {
 	}
     }
 
-    void startILink3Connection() throws ConfigError, FieldConvertError {
+    public void startILink3Connection(boolean useLastConnection, boolean useBackUp) throws ConfigError {
+	startILink3Connection(useLastConnection, useBackUp, true);
+    }
+
+    public void reconnectILink3Connection(boolean useLastConnection, boolean useBackUp) throws ConfigError {
+        startILink3Connection(useLastConnection, useBackUp, false);
+    }
+
+    private void startILink3Connection(boolean useLastConnection, boolean useBackUp, boolean startUp) throws ConfigError {
 	LOG.info("Starting iLink3 connection...");
 
-	if (libraryPollingFuture != null) {
-	    libraryPollingFuture.cancel(true);
+	if (connection != null) {
+	    LOG.info("An existing connection object was found with lastUuid: {} currentUuid: {}", connection.lastUuid(),
+		    connection.uuid());
+	} else {
+	    LOG.info("No previous connection found, clean start");
 	}
 
 	if (settings.isSetting(SESSION_ID_ILINK3, SETTING_FIXP_DEBUG)) {
 	    System.setProperty("fix.core.debug", settings.getString(SESSION_ID_ILINK3, SETTING_FIXP_DEBUG));
 	}
 
-	final IdleStrategy idleStrategy = new SleepingMillisIdleStrategy();
-	final EngineConfiguration engineConfiguration = engineConfiguration();
-	mediaDriver = launchMediaDriver(engineConfiguration);
-	engine = FixEngine.launch(engineConfiguration);
-	library = FixLibrary.connect(libraryConfiguration());
+	if (libraryPollingFuture != null) {
+	    libraryPollingFuture.cancel(true);
+	}
+	
+	if (startUp) {
+	    // we only need this first time we startup
+	    final EngineConfiguration engineConfiguration = engineConfiguration();
+	    mediaDriver = launchMediaDriver(engineConfiguration);
+	    engine = FixEngine.launch(engineConfiguration);
+	    library = FixLibrary.connect(libraryConfiguration());
+	}
 
-	final uk.co.real_logic.artio.ilink.ILink3ConnectionHandler connectionHandler = new ILink3ConnectionHandler(LOG,
-		fixpMessageHandler, fixMessageHandler);
 	final ILink3ConnectionConfiguration connectionConfiguration = ILink3ConnectionConfiguration.builder()
-		.host(settings.getString(SESSION_ID_ILINK3, Initiator.SETTING_SOCKET_CONNECT_HOST))
-		.port(Integer.valueOf(settings.getString(SESSION_ID_ILINK3, Initiator.SETTING_SOCKET_CONNECT_PORT)))
+		.host(useBackUp ? settings.getString(SESSION_ID_ILINK3, Initiator.SETTING_SOCKET_CONNECT_HOST + "1")
+			: settings.getString(SESSION_ID_ILINK3, Initiator.SETTING_SOCKET_CONNECT_HOST))
+		.port(useBackUp
+			? Integer.valueOf(
+				settings.getString(SESSION_ID_ILINK3, Initiator.SETTING_SOCKET_CONNECT_PORT + "1"))
+			: Integer.valueOf(settings.getString(SESSION_ID_ILINK3, Initiator.SETTING_SOCKET_CONNECT_PORT)))
 		.sessionId(settings.getString(SESSION_ID_ILINK3, SETTING_SESSION_ID))
 		.firmId(settings.getString(SESSION_ID_ILINK3, SETTING_FIRM_ID))
 		.userKey(settings.getString(SESSION_ID_ILINK3, SETTING_USER_KEY))
@@ -235,7 +318,7 @@ public class ILink3Connector {
 		.tradingSystemVendor(settings.getString(SESSION_ID_ILINK3, SETTING_TRADING_SYSTEM_VENDOR))
 		.tradingSystemVersion(settings.getString(SESSION_ID_ILINK3, SETTING_TRADING_SYSTEM_VERSION))
 		.handler(connectionHandler).requestedKeepAliveIntervalInMs(30000)
-//		.reEstablishLastConnection(true)
+		.reEstablishLastConnection(useLastConnection)
 		.build();
 
 	while (!library.isConnected()) {
@@ -249,17 +332,33 @@ public class ILink3Connector {
 	    idleStrategy.idle(library.poll(1));
 	}
 
-	libraryPollingFuture = pollingExecutor.submit(new LibraryPollTask(library, idleStrategy));
-
 	if (reply.hasCompleted()) {
+	    final ILink3Connection prevConnection = connection;
 	    connection = reply.resultIfPresent();
-	    LOG.info("Connected: " + connection);
+
+	    if (prevConnection != null) {
+                LOG.info("Previous Connection: {}", prevConnection);
+            }
+            LOG.info("Connection: {}", connection);
+            
+	    // message store with the uuid of the current session as SessionQualifier
+	    messageStore = messageStoreFactory
+		    .create(new SessionID(SESSION_ID_ILINK3.getBeginString(), SESSION_ID_ILINK3.getSenderCompID(),
+			    SESSION_ID_ILINK3.getTargetCompID(), String.valueOf(connection.uuid())));
+	    connectionHandler.setMessageStore(messageStore);
+
 	} else if (reply.hasErrored()) {
 	    LOG.error("Error when connecting: " + reply.error());
 	} else if (reply.hasTimedOut()) {
 	    LOG.error("Timed out when connecting: " + reply);
 	}
 
+        libraryPollingFuture = pollingExecutor.submit(new LibraryPollTask(library, idleStrategy));
+	if (pendingRetransmitRequest != null) {
+	    triggerRetransmitRequest(pendingRetransmitRequest.getUuid(), pendingRetransmitRequest.getSeqNum(), 0);
+	    pendingRetransmitRequest = null;
+	}
+	
 //	    todo: act on disconnect from fixlibrary also!
 //	    nb: config for engine and library should not be reused over engine.launch() or library.connect() calls
 //	    when closing the library, make sure that we do not poll
@@ -314,11 +413,85 @@ public class ILink3Connector {
 	return ArchivingMediaDriver.launch(context, archiveCtx);
     }
 
+    public void handleRemoteDisconnect() {
+        //TODO I think this will need to do something with the session scheduling to initiate reconnect attempts?
+    }
+
+    public void disconnect() {
+        LOG.info("Disconnecting on user request");
+        connection.terminate("USER_REQUEST", 0);
+    }
+
+    public void connect(boolean uselastConnection, boolean useBackup) {
+	LOG.info("Connecting on user request");
+	try {
+	    reconnectILink3Connection(uselastConnection, useBackup);
+	} catch (ConfigError e) {
+	    throw new RuntimeException(e);
+	}
+    }
+
+    public void handleEstablishAck(long previousUuid, long previousSeqNo, long uuid, long lastUuid, long nextSeqNo) {
+	if (previousUuid == 0 && previousSeqNo > 0) {
+	    // We are connecting at the beginning of the week and cme has sent messages on
+	    // the previous uuid. This is indicated by the previousSeqNum>0 with prevUuid==0
+	    // Artio will automatically trigger a resend request, but only if its own
+	    // administered lastUuid is also 0. This should be the case, but if there is a
+	    // failed connection attempt before it may not be so.
+	    // The fact that it works with artio, is dependent on the primitive default
+	    // values of lastuuid and lastseqnum as such it's not entirely clear if this is
+	    // on purpose or happy by product.
+	    if (lastUuid == 0) {
+		// artio wil trigger a resend request, don't do anything
+		// this doesn't happen if we already connected in the same session... which
+		// would be weird but may happen if there is a connection problem
+	    } else {
+		LOG.info("Triggering retransmit request for beginning of week messages");
+		pendingRetransmitRequest = new RetransmitRequest(0, 1);
+	    }
+	}
+	if (previousUuid != 0 && previousSeqNo > 0) {
+	    if (previousUuid == lastUuid) {
+		LOG.info(
+			"Artio can detect the discrepancy and will automatically send a resend request, please double check");
+	    } else {
+		LOG.info(
+			"PreviousUuid was: {} with previousSeqNum: {} loading message store from previous session to verify for missing messages",
+			previousUuid, previousSeqNo);
+		MessageStore prevMessageStore = messageStoreFactory.create(
+			new SessionID(FixVersions.BEGINSTRING_FIXT11, "QFJ", "ILINK3", String.valueOf(previousUuid)));
+		try {
+		    LOG.info("found last processed seqnum for uuid: {} @ {}", previousUuid,
+			    prevMessageStore.getNextTargetMsgSeqNum() - 1);
+		    if (prevMessageStore.getNextTargetMsgSeqNum() <= previousSeqNo) {
+			LOG.info(
+				"Last processed business message is different than what we received from cme: {} found: {} triggering a resend request",
+				prevMessageStore.getNextTargetMsgSeqNum() - 1, previousSeqNo);
+			pendingRetransmitRequest = new RetransmitRequest(previousUuid,
+				prevMessageStore.getNextTargetMsgSeqNum());
+		    }
+		} catch (IOException e) {
+		    LOG.error("Could not read messageStore: {}", e.getMessage(), e);
+		}
+	    }
+	}
+    }
+
+    public Date getStartTime() throws IOException {
+	if (messageStore == null) {
+	    return null;
+	} else {
+	    return messageStore.getCreationTime();
+	}
+    }
+
     private static class ErrorHandler implements org.agrona.ErrorHandler {
 
 	@Override
 	public void onError(Throwable throwable) {
-	    LOG.error("ILink3Connector.ErrorHandler.onError() " + throwable);
+	    StringWriter sw = new StringWriter();
+	    throwable.printStackTrace(new PrintWriter(sw));
+	    LOG.error("ILink3Connector.ErrorHandler.onError() {}", sw, throwable);
 	}
     }
 
@@ -327,7 +500,7 @@ public class ILink3Connector {
 	@Override
 	public void onReplayedBusinessMessage(int templateId, DirectBuffer buffer, int offset, int blockLength,
 		int version) {
-	    LOG.info("ILink3Connector.RetransmitHandler.onReplayedBusinessMessage() " + templateId);
+	    LOG.info("ILink3Connector.RetransmitHandler.onReplayedBusinessMessage()  {}", templateId);
 	}
 
     }
@@ -350,5 +523,25 @@ public class ILink3Connector {
 	    }
 	    LOG.info(this.getClass().getName() + " STOPPED.");
 	}
+    }
+
+    private class RetransmitRequest {
+
+	private final long uuid;
+	private final long seqNum;
+
+	public RetransmitRequest(long uuid, long seqNum) {
+	    this.uuid = uuid;
+	    this.seqNum = seqNum;
+	}
+
+	public long getUuid() {
+	    return uuid;
+	}
+
+	public long getSeqNum() {
+	    return seqNum;
+	}
+
     }
 }
